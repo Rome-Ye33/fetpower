@@ -517,6 +517,14 @@ const VALUES: Record<string, string> = {
   "回款的金额要大于 0、小于流水金额 {amt}（全是回款就直接录成到账）": "The payment part must be more than 0 and less than the line amount {amt} (if it's all payment, just create a receipt)",
   "这条银行流水里还有「{module}」（和到账一起填的），取消配对会把它一起删掉，要有“银行日记账”的编辑权限，请找管理员": "This bank line also has “{module}” filled in together with the receipt. Removing the match deletes it too, which needs edit permission for the bank journal. Ask an admin",
   "这条银行流水已经配上了到账 {no}，剩下的金额对不上，请刷新": "This bank line is already matched to receipt {no} and the remaining amount doesn't add up. Please refresh",
+  // 38 到账汇率可以先不填，让业务员填
+  "这笔到账还没填汇率，填上汇率才能生效（现在没有审批级别的，录入就生效，要先填汇率）": "This receipt has no exchange rate yet. It can only take effect once the rate is filled in (with no approval levels a receipt takes effect on entry, so fill in the rate first).",
+  "这笔到账还没填汇率，请财务先补上汇率再审": "This receipt has no exchange rate yet. Finance needs to fill in the rate before it can be approved.",
+  "这笔到账还没填汇率，拆分请填原币金额": "This receipt has no exchange rate yet. Enter the split amounts in the local currency.",
+  "这笔到账已经有汇率了（{rate}），不对请退回写明原因": "This receipt already has an exchange rate ({rate}). If it is wrong, return it with a reason.",
+  "请填汇率（1 美元 = ? {cur}）": "Enter the exchange rate (1 USD = ? {cur})",
+  "这笔到账现在不在审批中，请刷新后再看": "This receipt is no longer in approval. Please refresh.",
+  "填了汇率 {rate}": "Filled in the exchange rate: {rate}",
 }
 
 // 界面文字（检查脚本从代码里的 t('…') / tr('…') 找）
@@ -2095,6 +2103,17 @@ const UI: Record<string, string> = {
   "补填差额": "Fill in the difference",
   "取消配对？": "Remove the match?",
   "和这笔到账一起填的「{module}」{no} 会一起删掉，这条流水回到没配对。": "“{module}” {no}, filled in together with this receipt, is deleted too, and the line goes back to unmatched.",
+  // 38 到账汇率可以先不填，让业务员填
+  "还没填汇率，请财务先补上再审": "No exchange rate yet. Finance needs to fill it in before this can be approved.",
+  "请先填汇率": "Fill in the exchange rate first",
+  "这笔到账还没填汇率，批不了。请财务先在下面“汇率”里填好保存，再来审批。": "This receipt has no exchange rate yet, so it can't be approved. Finance needs to fill in “Exchange rate” below and save first.",
+  "财务没填汇率，请你填上和客户约定的汇率再确认：": "Finance left the exchange rate blank. Fill in the rate agreed with the customer, then confirm:",
+  "财务没填汇率，代业务员确认时要填上汇率：": "Finance left the exchange rate blank. Fill it in when confirming for the salesperson:",
+  "汇率还空着：业务员确认时会填上。你知道汇率的也可以先在下面填好保存（补汇率不会重新审批）。": "The exchange rate is still blank: the salesperson fills it in when confirming. If you know it, you can fill it in below and save (adding the rate does not restart approval).",
+  "汇率还空着，审批人批不了：请在下面“汇率”里填好保存（补汇率不会重新审批）。": "The exchange rate is still blank, so the approver can't approve: fill in “Exchange rate” below and save (adding the rate does not restart approval).",
+  "他填的汇率：{rate}": "Rate he entered: {rate}",
+  "不知道可以先空着，业务员确认时填": "Leave it blank if you don't know; the salesperson fills it in when confirming",
+  "财务没填汇率，请填上和客户约定的汇率": "Finance left the rate blank. Enter the rate agreed with the customer.",
 }
 
 export const EN: Record<string, string> = { ...VALUES, ...UI }

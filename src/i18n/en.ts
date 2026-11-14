@@ -554,8 +554,6 @@ const UI: Record<string, string> = {
     "Finance can see and edit every module by default. To restrict them, click “Set” in the Module permissions column after adding them.",
   "核对凭证和金额，选好车，没问题点“通过，生成到账”；不对就点“退回”写明原因。":
     "Check the proof and the amount, and choose the vehicles. If everything is right, click “Approve and create receipt”; if not, click “Return” and give the reason.",
-  "这些到账记在客户名下，但还没定是哪台车，不算进任何一台车的回款（审批中的也列在这里）。":
-    "These receipts are recorded under the customer, but the vehicle isn't known yet, so they don't count toward any vehicle (receipts still in approval are listed too).",
   "银行流水里有、但系统里没人录的款。": "Money in the bank statement that nobody has entered.",
   // 菜单、页头
   "业财管理": "Sales & Finance",
@@ -1057,8 +1055,6 @@ const UI: Record<string, string> = {
   "挂账：发车不看回款。": "On credit: the vehicle can be released without waiting for payment.",
   "银行担保按全款录，选“全款”。": "For a bank guarantee, choose “Full payment”.",
   "大架号未锁定的到账": "Receipts without a VIN",
-  "这些到账记在客户名下，但还没定是哪台车，不算进任何一台车的回款（审批中的也列在这里）。知道是哪台车后，点到账编号打开，把车选上就锁定了。":
-    "These receipts are recorded under the customer, but the vehicle isn't known yet, so they don't count toward any vehicle (receipts still in approval are listed too). Once you know the vehicle, click the receipt number and choose it.",
   "这些到账记在客户名下，但还没定是哪台车，不算进任何一台车的回款（审批中的也列在这里）。知道是哪台车后请告诉财务。":
     "These receipts are recorded under the customer, but the vehicle isn't known yet, so they don't count toward any vehicle (receipts still in approval are listed too). Tell finance once you know the vehicle.",
   // 2026-11-14 没定大架号的到账好找

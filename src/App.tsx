@@ -27,6 +27,7 @@ import { useLineTodo } from './lib/journal'
 import { goPath, takeGo } from './lib/notify'
 import { useSubmissionCount } from './lib/submissions'
 import { useTodoCount } from './lib/workbench'
+import { useBadges } from './lib/badges'
 import LoginPage from './pages/LoginPage'
 
 const ReceiptsPage = lazy(() => import('./pages/ReceiptsPage'))
@@ -51,12 +52,13 @@ function FullSpin() {
   )
 }
 
-/** 菜单文字 + 右边的数字（待审核 / 被退回）。地方不够时文字出省略号，数字总是看得见 */
-function withCount(label: string, n: number) {
+/** 菜单文字 + 右边的数字（待审核 / 被退回）；warn：再加一个橙色的数字（业务员名下大架号未锁定的到账）。地方不够时文字出省略号，数字总是看得见 */
+function withCount(label: string, n: number, warn = 0) {
   return (
     <span className="menu-label">
       <span className="menu-label-text">{label}</span>
       {n > 0 && <Badge count={n} size="small" />}
+      {warn > 0 && <Badge count={warn} size="small" color="orange" className="menu-badge-warn" />}
     </span>
   )
 }
@@ -83,6 +85,8 @@ export default function App() {
   const chequeAlert = useChequeAlert(canView('cheques'))
   // 银行流水还没填的（按分工：填收款的只算收进来的、填付款的只算付出去的）：管填流水的人才提醒
   const lineTodo = useLineTodo(canView('reconcile') && (auth.canEdit('reconcile') || auth.canEdit('journal')), auth.duty)
+  // 业务员：自己名下还没定是哪台车的到账（大架号未锁定），在“提交到账”上用橙色数字提醒他告诉财务是哪台车
+  const unlocked = useBadges(isSales, false, false, true).unlocked
 
   // 登录后换成这个人上次选的语言
   useEffect(() => {
@@ -152,7 +156,7 @@ export default function App() {
       ]
     : [
         workbench,
-        { key: '/submit', icon: <SendOutlined />, label: withCount(t('提交到账'), rejected) },
+        { key: '/submit', icon: <SendOutlined />, label: withCount(t('提交到账'), rejected, unlocked) },
         { key: '/vehicles', icon: <CarOutlined />, label: t('我的车辆') },
         { key: '/commission', icon: <FileDoneOutlined />, label: withCount(t('提成申请单'), voucherTodo) },
       ]

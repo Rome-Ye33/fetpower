@@ -1,5 +1,6 @@
 import { DeleteOutlined, DownloadOutlined, EditOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import {
+  Alert,
   App,
   Badge,
   Button,
@@ -33,6 +34,7 @@ import { useRefData } from '../lib/refdata'
 import { fetchAll, supabase } from '../lib/supabase'
 import type { Claim, Vehicle } from '../lib/supabase'
 import { useT } from '../lib/i18n'
+import { UNLOCKED_KINDS, UNLOCKED_LIVE } from '../lib/unlocked'
 
 const PAY_COLOR: Record<string, string> = { 已结清: 'green', 部分到账: 'orange', 未收款: 'red' }
 
@@ -138,14 +140,14 @@ export default function VehiclesPage() {
     void load()
   }, [load])
 
-  // 大架号未锁定的到账有几笔（钱到了、记在客户名下，还没定是哪台车）
+  // 大架号未锁定的到账有几笔（钱到了、记在客户名下，还没定是哪台车；审批中的也算）
   const loadUnlocked = useCallback(async () => {
     const { count } = await supabase
       .from('v_receipt_claims')
       .select('id', { count: 'exact', head: true })
       .is('vehicle_id', null)
-      .in('nature_kind', ['payment', 'opening'])
-      .or('receipt_status.is.null,receipt_status.eq.approved') // 审批中、退回的到账还不算
+      .in('nature_kind', UNLOCKED_KINDS)
+      .or(UNLOCKED_LIVE)
     setUnlockedCount(count ?? 0)
   }, [])
 
@@ -257,6 +259,20 @@ export default function VehiclesPage() {
           )}
         </Space>
       </div>
+      {!isStaff && unlockedCount > 0 && (
+        <Alert
+          className="unlocked-alert"
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={t('你有 {n} 笔到账还没定是哪台车（大架号未锁定），不算进车的回款。知道是哪台车后请告诉财务。', { n: unlockedCount })}
+          action={
+            <Button size="small" onClick={() => setUnlockedOpen(true)}>
+              {t('查看')}
+            </Button>
+          }
+        />
+      )}
       <Space wrap className="filters">
         <Input.Search allowClear placeholder={t('大架号、客户、车型')} style={{ width: 240 }} onSearch={setQ} />
         {isStaff && (
@@ -395,12 +411,13 @@ function UnlockedDrawer({ open, onClose, onChanged }: { open: boolean; onClose: 
       .from('v_receipt_claims')
       .select('*')
       .is('vehicle_id', null)
-      .in('nature_kind', ['payment', 'opening'])
-      .or('receipt_status.is.null,receipt_status.eq.approved') // 审批中、退回的到账还不算
+      .in('nature_kind', UNLOCKED_KINDS)
+      .or(UNLOCKED_LIVE)
       .order('claim_date', { ascending: false })
       .order('id', { ascending: false })
       .limit(2000)
     setRows(data ?? [])
+    setShown(null)
     setLoading(false)
   }, [])
 
@@ -408,22 +425,25 @@ function UnlockedDrawer({ open, onClose, onChanged }: { open: boolean; onClose: 
     if (open) void load()
   }, [open, load])
 
-  const total = rows.reduce((s, r) => s + num(r.amount_usd), 0)
+  /** 列头筛选后表里实际显示的行（合计按它算） */
+  const [shown, setShown] = useState<Claim[] | null>(null)
+  // 合计只算已生效的（审批中的还不算到账）
+  const total = (shown ?? rows).filter((r) => r.receipt_status == null || r.receipt_status === 'approved').reduce((s, r) => s + num(r.amount_usd), 0)
 
   return (
     <Drawer
       open={open}
       onClose={onClose}
-      size={Math.min(1000, typeof window !== 'undefined' ? window.innerWidth : 1000)}
+      size={Math.min(1120, typeof window !== 'undefined' ? window.innerWidth : 1120)}
       title={t('大架号未锁定的到账')}
       destroyOnHidden
     >
       <Typography.Paragraph type="secondary">
         {rxEdit
-          ? t('这些钱已经到账、记在客户名下，但还没定是哪台车，不算进任何一台车的回款。知道是哪台车后，点到账编号打开，把车选上就锁定了。')
+          ? t('这些到账记在客户名下，但还没定是哪台车，不算进任何一台车的回款（审批中的也列在这里）。知道是哪台车后，点到账编号打开，把车选上就锁定了。')
           : isStaff
-            ? t('这些钱已经到账、记在客户名下，但还没定是哪台车，不算进任何一台车的回款。')
-            : t('这些钱已经到账、记在客户名下，但还没定是哪台车，不算进任何一台车的回款。知道是哪台车后请告诉财务。')}
+            ? t('这些到账记在客户名下，但还没定是哪台车，不算进任何一台车的回款（审批中的也列在这里）。')
+            : t('这些到账记在客户名下，但还没定是哪台车，不算进任何一台车的回款（审批中的也列在这里）。知道是哪台车后请告诉财务。')}
       </Typography.Paragraph>
       <Table
         rowKey={(r) => r.id as number}
@@ -431,11 +451,19 @@ function UnlockedDrawer({ open, onClose, onChanged }: { open: boolean; onClose: 
         loading={loading}
         dataSource={rows}
         pagination={{ defaultPageSize: 50, showTotal: (n) => t('共 {n} 笔', { n }) }}
-        scroll={{ x: 940 }}
+        scroll={{ x: 1040 }}
+        onChange={(_, __, ___, extra) => setShown(extra.currentDataSource)}
         columns={[
           { title: t('日期'), dataIndex: 'claim_date', width: 100 },
-          { title: t('客户'), dataIndex: 'customer_name', width: 180, ellipsis: true },
-          { title: t('业务员'), dataIndex: 'salesperson_name', width: 100, ellipsis: true },
+          {
+            title: t('审批'),
+            width: 90,
+            // 期初不挂到账，算已生效
+            render: (_, c) => <Tag color={RECEIPT_STATUS_COLOR[receiptStatus(c.receipt_status)]}>{t(RECEIPT_STATUS_LABEL[receiptStatus(c.receipt_status)])}</Tag>,
+            ...pickCol(rows, (c) => RECEIPT_STATUS_LABEL[receiptStatus(c.receipt_status)], t),
+          },
+          { title: t('客户'), dataIndex: 'customer_name', width: 180, ellipsis: true, ...pickCol(rows, (c) => c.customer_name) },
+          { title: t('业务员'), dataIndex: 'salesperson_name', width: 100, ellipsis: true, ...pickCol(rows, (c) => c.salesperson_name) },
           { title: t('数量与设备型号'), dataIndex: 'model_desc', ellipsis: true },
           { title: t('性质'), dataIndex: 'nature', width: 90, render: (x: string) => t(x) },
           {
@@ -455,13 +483,13 @@ function UnlockedDrawer({ open, onClose, onChanged }: { open: boolean; onClose: 
         summary={() =>
           rows.length ? (
             <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={6}>
-                {t('合计')}
+              <Table.Summary.Cell index={0} colSpan={7}>
+                {t('已生效合计')}
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={6} align="right">
+              <Table.Summary.Cell index={7} align="right">
                 <span className="num">{usd(total)}</span>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={7} />
+              <Table.Summary.Cell index={8} />
             </Table.Summary.Row>
           ) : null
         }

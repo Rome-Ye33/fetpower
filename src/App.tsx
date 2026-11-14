@@ -27,6 +27,7 @@ import { useLineTodo } from './lib/journal'
 import { goPath, takeGo } from './lib/notify'
 import { useSubmissionCount } from './lib/submissions'
 import { useTodoCount } from './lib/workbench'
+import { useBadges } from './lib/badges'
 import LoginPage from './pages/LoginPage'
 
 const ReceiptsPage = lazy(() => import('./pages/ReceiptsPage'))
@@ -83,6 +84,8 @@ export default function App() {
   const chequeAlert = useChequeAlert(canView('cheques'))
   // 银行流水还没填的（按分工：填收款的只算收进来的、填付款的只算付出去的）：管填流水的人才提醒
   const lineTodo = useLineTodo(canView('reconcile') && (auth.canEdit('reconcile') || auth.canEdit('journal')), auth.duty)
+  // 业务员：自己名下还没定是哪台车的到账（大架号未锁定），提醒他告诉财务是哪台车
+  const unlocked = useBadges(isSales, false, false, true).unlocked
 
   // 登录后换成这个人上次选的语言
   useEffect(() => {
@@ -153,7 +156,7 @@ export default function App() {
     : [
         workbench,
         { key: '/submit', icon: <SendOutlined />, label: withCount(t('提交到账'), rejected) },
-        { key: '/vehicles', icon: <CarOutlined />, label: t('我的车辆') },
+        { key: '/vehicles', icon: <CarOutlined />, label: withCount(t('我的车辆'), unlocked) },
         { key: '/commission', icon: <FileDoneOutlined />, label: withCount(t('提成申请单'), voucherTodo) },
       ]
 

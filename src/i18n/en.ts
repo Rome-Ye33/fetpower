@@ -554,8 +554,8 @@ const UI: Record<string, string> = {
     "Finance can see and edit every module by default. To restrict them, click “Set” in the Module permissions column after adding them.",
   "核对凭证和金额，选好车，没问题点“通过，生成到账”；不对就点“退回”写明原因。":
     "Check the proof and the amount, and choose the vehicles. If everything is right, click “Approve and create receipt”; if not, click “Return” and give the reason.",
-  "这些钱已经到账、记在客户名下，但还没定是哪台车，不算进任何一台车的回款。":
-    "This money has arrived and is recorded under the customer, but the vehicle isn't known yet, so it doesn't count toward any vehicle.",
+  "这些到账记在客户名下，但还没定是哪台车，不算进任何一台车的回款（审批中的也列在这里）。":
+    "These receipts are recorded under the customer, but the vehicle isn't known yet, so they don't count toward any vehicle (receipts still in approval are listed too).",
   "银行流水里有、但系统里没人录的款。": "Money in the bank statement that nobody has entered.",
   // 菜单、页头
   "业财管理": "Sales & Finance",
@@ -1057,10 +1057,18 @@ const UI: Record<string, string> = {
   "挂账：发车不看回款。": "On credit: the vehicle can be released without waiting for payment.",
   "银行担保按全款录，选“全款”。": "For a bank guarantee, choose “Full payment”.",
   "大架号未锁定的到账": "Receipts without a VIN",
-  "这些钱已经到账、记在客户名下，但还没定是哪台车，不算进任何一台车的回款。知道是哪台车后，点到账编号打开，把车选上就锁定了。":
-    "This money has arrived and is recorded under the customer, but the vehicle isn't known yet, so it doesn't count toward any vehicle. Once you know the vehicle, click the receipt number and choose it.",
-  "这些钱已经到账、记在客户名下，但还没定是哪台车，不算进任何一台车的回款。知道是哪台车后请告诉财务。":
-    "This money has arrived and is recorded under the customer, but the vehicle isn't known yet, so it doesn't count toward any vehicle. Tell finance once you know the vehicle.",
+  "这些到账记在客户名下，但还没定是哪台车，不算进任何一台车的回款（审批中的也列在这里）。知道是哪台车后，点到账编号打开，把车选上就锁定了。":
+    "These receipts are recorded under the customer, but the vehicle isn't known yet, so they don't count toward any vehicle (receipts still in approval are listed too). Once you know the vehicle, click the receipt number and choose it.",
+  "这些到账记在客户名下，但还没定是哪台车，不算进任何一台车的回款（审批中的也列在这里）。知道是哪台车后请告诉财务。":
+    "These receipts are recorded under the customer, but the vehicle isn't known yet, so they don't count toward any vehicle (receipts still in approval are listed too). Tell finance once you know the vehicle.",
+  // 2026-11-14 没定大架号的到账好找
+  "拆分里有只选了客户、还没定车的，知道是哪台车后打开这笔把车选上":
+    "Part of this receipt is allocated to a customer without a vehicle. Once you know the vehicle, open it and choose the vehicle.",
+  "没定大架号的": "No VIN yet",
+  "你有 {n} 笔到账还没定是哪台车（大架号未锁定），不算进车的回款。知道是哪台车后请告诉财务。":
+    "{n} of your receipts have no vehicle yet (VIN not set), so they don't count toward any vehicle. Tell finance once you know the vehicle.",
+  "查看": "View",
+  "已生效合计": "Total in effect",
   "共 {n} 笔": "{n} items",
   "合同日期": "Contract date",
   "合同价（USD）": "Contract price (USD)",

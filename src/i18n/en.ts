@@ -2103,6 +2103,11 @@ const UI: Record<string, string> = {
   "{line}里到账以外的 {cur} {amt} 填成了「{module}」（{no}）": "{line}: the {cur} {amt} beyond the receipt was filled in as “{module}” ({no})",
   "收起": "Hide",
   "展开其余 {n} 条": "Show {n} more",
+  // 日记账导出 Excel
+  "单号": "Doc no.",
+  "折美元": "USD equiv.",
+  "流水到": "Statement to",
+  "已筛选": "filtered",
   "分 {n} 种业务": "{n} categories",
   "展开每种业务": "Show all categories",
   "流水比到账多 {cur} {amt}，剩下的钱现在填上？": "The line is {cur} {amt} more than the receipt. Fill in the rest now?",

@@ -81,6 +81,8 @@ export default function SubmissionForm({ open, submission, onClose }: Props) {
   const account = accountId ? accountById.get(accountId) : undefined
   const currency = account?.currency ?? ''
   const isUsd = currency === 'USD'
+  /** 财务请我填写、财务没填汇率的（38）：汇率由我填，别的到账信息照旧锁着 */
+  const reqRateOpen = isReq && !isUsd && submission?.fx_rate == null
 
   const remember = useCallback((list: (Vehicle | null | undefined)[]) => {
     setVehicles((m) => {
@@ -270,7 +272,7 @@ export default function SubmissionForm({ open, submission, onClose }: Props) {
       const res = submission
         ? await supabase
             .from('receipt_submissions')
-            .update({ ...(isReq ? {} : head), ...body, ...(status === 'rejected' || status === 'requested' ? { status: 'pending' } : {}) })
+            .update({ ...(isReq ? (reqRateOpen ? { fx_rate: num(v.fx_rate) || null } : {}) : head), ...body, ...(status === 'rejected' || status === 'requested' ? { status: 'pending' } : {}) })
             .eq('id', submission.id)
             .select('id')
         : await supabase.from('receipt_submissions').insert({ ...head, ...body }).select('id')
@@ -460,13 +462,19 @@ export default function SubmissionForm({ open, submission, onClose }: Props) {
                 <Form.Item
                   name="fx_rate"
                   label={t('汇率（1 美元 = ? {cur}）', { cur: currency || t('原币') })}
-                  extra={amount > 0 && rate > 0 ? t('折合 {usd}', { usd: usd(amount / rate) }) : t('默认当天汇率，客户约定了别的就改')}
+                  extra={
+                    amount > 0 && rate > 0
+                      ? t('折合 {usd}', { usd: usd(amount / rate) })
+                      : reqRateOpen
+                        ? t('财务没填汇率，请填上和客户约定的汇率')
+                        : t('默认当天汇率，客户约定了别的就改')
+                  }
                 >
                   <InputNumber
                     min={0.000001}
                     precision={4}
                     style={{ width: '100%' }}
-                    disabled={isReq || !editable}
+                    disabled={(isReq && !reqRateOpen) || !editable}
                     onChange={() => {
                       rateTouched.current = true
                     }}

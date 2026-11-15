@@ -15,6 +15,7 @@ import { tr, useT } from '../lib/i18n'
 import { accountOptions, useRefData } from '../lib/refdata'
 import { useSubmissionCount } from '../lib/submissions'
 import { supabase } from '../lib/supabase'
+import { UNLOCKED_KINDS, UNLOCKED_LIVE } from '../lib/unlocked'
 import type { Receipt } from '../lib/supabase'
 
 export const CLAIM_COLOR: Record<string, string> = { 未认领: 'red', 部分认领: 'orange', 已认领: 'green' }
@@ -45,9 +46,23 @@ function ReceiptList() {
   const [importOpen, setImportOpen] = useState(false)
   /** 列头筛选后表里实际显示的行（合计按它算） */
   const [shown, setShown] = useState<Receipt[] | null>(null)
+  /** 拆分里有“大架号未锁定”（只选了客户、还没定车）的到账：id → 到账日期 */
+  const [unlocked, setUnlocked] = useState<Map<number, string>>(new Map())
 
   const load = useCallback(async () => {
     setLoading(true)
+    // 先查哪些到账还有没定车的拆分（列表上标出来、筛选、顶上的数字都用它）
+    const { data: uc } = await supabase
+      .from('v_receipt_claims')
+      .select('receipt_id, claim_date')
+      .is('vehicle_id', null)
+      .not('receipt_id', 'is', null)
+      .in('nature_kind', UNLOCKED_KINDS)
+      .or(UNLOCKED_LIVE)
+      .limit(5000)
+    const um = new Map<number, string>()
+    for (const c of uc ?? []) if (c.receipt_id != null) um.set(c.receipt_id, c.claim_date ?? '')
+    setUnlocked(um)
     let query = supabase
       .from('v_bank_receipts')
       .select('*')
@@ -58,7 +73,8 @@ function ReceiptList() {
       .limit(2000)
     if (accountId) query = query.eq('account_id', accountId)
     if (approval) query = query.eq('status', approval)
-    if (claimStatus) query = query.eq('claim_status', claimStatus)
+    if (claimStatus === '大架号未锁定') query = query.in('id', um.size ? [...um.keys()] : [0])
+    else if (claimStatus) query = query.eq('claim_status', claimStatus)
     if (bankStatus) query = query.eq('bank_status', bankStatus)
     if (reportStatus === '未报') query = query.eq('is_reported', false)
     if (reportStatus === '已报') query = query.eq('is_reported', true)
@@ -107,11 +123,18 @@ function ReceiptList() {
     { title: 'USD', dataIndex: 'amount_usd', width: 96, align: 'right', render: (v: number) => <span className="num">{usd(v)}</span> },
     {
       title: t('拆分'),
-      width: 150,
+      width: 190,
       render: (_, r) => (
-        <Space size={4}>
+        <Space size={4} wrap>
           <Tag color={CLAIM_COLOR[r.claim_status ?? '']}>{t(r.claim_status ?? '')}</Tag>
           {r.claim_status === '部分认领' && <span className="hint">{t('剩 {amt}', { amt: money(r.pending_orig) })}</span>}
+          {r.id != null && unlocked.has(r.id) && (
+            <Tooltip title={t('拆分里有只选了客户、还没定车的，知道是哪台车后打开这笔把车选上')}>
+              <Tag color="orange" className="unlocked-tag">
+                {t('大架号未锁定')}
+              </Tag>
+            </Tooltip>
+          )}
         </Space>
       ),
       ...pickCol(rows, (r) => r.claim_status, t),
@@ -140,6 +163,13 @@ function ReceiptList() {
   // 合计只算已生效的（审批中、退回的还不算到账）
   const total = (shown ?? rows).filter((r) => receiptStatus(r.status) === 'approved').reduce((s, r) => s + Number(r.amount_usd ?? 0), 0)
   const opts = (list: string[]) => list.map((x) => ({ value: x, label: t(x) }))
+
+  /** 顶上“没定大架号的”：筛出全部还没定车的到账，日期范围放宽到包含最早那一笔（不然早的看不见） */
+  const showUnlocked = () => {
+    const first = [...unlocked.values()].filter(Boolean).sort()[0]
+    if (first && dayjs(first).isBefore(range[0], 'day')) setRange([dayjs(first), range[1]])
+    setClaimStatus('大架号未锁定')
+  }
 
   return (
     <div>
@@ -172,7 +202,15 @@ function ReceiptList() {
           onChange={setApproval}
           options={(['pending', 'approved', 'rejected', 'withdrawn'] as ReceiptStatus[]).map((x) => ({ value: x, label: t(RECEIPT_STATUS_LABEL[x]) }))}
         />
-        <Select allowClear placeholder={t('拆分状态')} style={{ width: 120 }} value={claimStatus} onChange={setClaimStatus} options={opts(['未认领', '部分认领', '已认领'])} />
+        <Select
+          allowClear
+          placeholder={t('拆分状态')}
+          style={{ width: 140 }}
+          value={claimStatus}
+          onChange={setClaimStatus}
+          options={opts(['未认领', '部分认领', '已认领', '大架号未锁定'])}
+          className="claim-filter"
+        />
         <Select allowClear placeholder={t('报款状态')} style={{ width: 120 }} value={reportStatus} onChange={setReportStatus} options={opts(['未报', '已报', '需发修改'])} />
         <Select
           allowClear
@@ -184,6 +222,11 @@ function ReceiptList() {
         />
         <Input.Search allowClear placeholder={t('编号、摘要、参考号、支票号')} style={{ width: 240 }} onSearch={setQ} />
         <Button icon={<ReloadOutlined />} onClick={() => void load()} />
+        <Badge count={unlocked.size} size="small" color="orange" overflowCount={999}>
+          <Button className="unlocked-btn" onClick={showUnlocked}>
+            {t('没定大架号的')}
+          </Button>
+        </Badge>
         {rxEdit && (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditor({ open: true, id: null })}>
             {t('新建到账')}

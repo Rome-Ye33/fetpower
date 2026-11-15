@@ -183,6 +183,8 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   /** 配对的流水里还有一笔和到账一起填的收入（37）：打开已录的到账时说一声 */
   const [lineEntry, setLineEntry] = useState<LineEntry | null>(null)
   const rateTouched = useRef(false)
+  /** 业务员确认时填的汇率（财务录的时候汇率空着，38） */
+  const [spRate, setSpRate] = useState<number | null>(null)
 
   const accountId = Form.useWatch('account_id', form)
   const amount = num(Form.useWatch('amount_orig', form))
@@ -224,6 +226,8 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   const holdsStep = stepIsSp ? isClaimSp : !!rStep && posts.includes(rStep)
   const canApprove = !!currentId && rStatus === 'pending' && !!rStep && (holdsStep || isAdmin)
   const canResubmit = !!currentId && (rStatus === 'rejected' || rStatus === 'withdrawn') && rxEdit
+  /** 存好的到账还没有汇率（38）：财务录的时候可以空着，业务员确认那一级填；空着谁都批不了 */
+  const rateMissing = !!currentId && !!receipt && receipt.currency !== 'USD' && receipt.fx_rate == null
   /** 第一级还没人批：录入的人或管理员可以撤回（撤回后不算到账，改好再重新提交；批过一级就只能请审核人退回） */
   const canWithdraw =
     !!currentId && rStatus === 'pending' && rxEdit && (isAdmin || (!!profile && receipt?.created_by === profile.id)) && rFlowItems.length > 0 && rStep === rFlowItems[0].step
@@ -289,7 +293,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
         account_id: rec.account_id ?? undefined,
         receipt_date: rec.receipt_date ? dayjs(rec.receipt_date) : undefined,
         amount_orig: num(rec.amount_orig),
-        fx_rate: num(rec.fx_rate),
+        fx_rate: rec.fx_rate != null ? num(rec.fx_rate) : null,   // 汇率可以空着（38）
         payer_summary: rec.payer_summary ?? '',
         cheque_no: rec.cheque_no ?? '',
         bank_ref: rec.bank_ref ?? '',
@@ -678,11 +682,15 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   }
 
   /** 到账的审批动作：通过这一级 / 退回 / 重新提交（receipt_action） */
-  const act = async (action: string, note?: string): Promise<boolean> => {
+  const act = async (action: string, note?: string, fillRate?: number): Promise<boolean> => {
     if (!currentId) return false
     const wasSp = stepIsSp
     setActing(action)
-    const { error } = await supabase.rpc('receipt_action', { p_id: currentId, p_action: action, p_note: note })
+    // 汇率空着：业务员（或管理员代办）填上汇率并确认，一步做完（38）
+    const { error } =
+      fillRate != null
+        ? await supabase.rpc('receipt_fill_rate', { p_id: currentId, p_rate: fillRate, p_approve: true })
+        : await supabase.rpc('receipt_action', { p_id: currentId, p_action: action, p_note: note })
     setActing(null)
     if (error) {
       message.error(errorText(error))
@@ -694,6 +702,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     const pending = receiptStatus(now?.status) === 'pending'
     const name = rflow.name(now?.step)
     if (action.startsWith('approve_')) {
+      setSpRate(null)
       // 业务员本人确认的一级（25）写“已确认”；下一级是它的写“等业务员确认”
       if (wasSp) message.success(pending ? t('已确认，等{name}审批', { name }) : t('已确认，这笔到账生效了'))
       else if (pending && nowSp(now)) message.success(t('已通过，等业务员确认'))
@@ -868,6 +877,11 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     const vids = lines.map((c) => c.vehicle_id).filter((x): x is number => !!x)
     if (vids.length) void supabase.from('v_vehicle_ledger').select('*').in('id', vids).then((v) => rememberVehicles(v.data ?? []))
     setClaims(rows)
+    // 汇率空着、业务员填了：一起带过来（38）
+    if (!isUsd && !(num(form.getFieldValue('fx_rate')) > 0) && fillReq.fx_rate != null) {
+      rateTouched.current = true
+      form.setFieldValue('fx_rate', num(fillReq.fx_rate))
+    }
     setFillApplied(true)
     setDirty(true)
     return rows
@@ -1174,7 +1188,21 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
             </Tooltip>
           )}
           {canApprove && rStep && (
-            <Button type="primary" loading={acting === `approve_${rStep}`} onClick={() => void act(`approve_${rStep}`)}>
+            <Button
+              type="primary"
+              loading={acting === `approve_${rStep}`}
+              disabled={rateMissing && !stepIsSp}
+              title={rateMissing && !stepIsSp ? t('还没填汇率，请财务先补上再审') : undefined}
+              onClick={() => {
+                if (rateMissing && stepIsSp) {
+                  if (!(num(spRate) > 0)) {
+                    message.error(t('请先填汇率'))
+                    return
+                  }
+                  void act(`approve_${rStep}`, undefined, num(spRate))
+                } else void act(`approve_${rStep}`)
+              }}
+            >
               {stepIsSp
                 ? holdsStep
                   ? t('确认无误')
@@ -1276,11 +1304,36 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                 : t('轮到你审批了：这一级是{name}', { name: rflow.name(rStep) })
             }
             description={
-              stepIsSp
-                ? holdsStep
-                  ? t('核对日期、金额和拆到哪台车，没问题点“确认无误”，不对点“退回”写明原因。确认后才到下一级审批。')
-                  : t('业务员有登录账号的，这笔在他的待办里，等他自己确认；没有账号或还没拆分的由你代办。确实和业务员核对过了再点“代业务员确认”。')
-                : t('核对凭证、金额和拆分，没问题点“通过”，不对点“退回”写明原因。')
+              <div>
+                <div>
+                  {stepIsSp
+                    ? holdsStep
+                      ? t('核对日期、金额和拆到哪台车，没问题点“确认无误”，不对点“退回”写明原因。确认后才到下一级审批。')
+                      : t('业务员有登录账号的，这笔在他的待办里，等他自己确认；没有账号或还没拆分的由你代办。确实和业务员核对过了再点“代业务员确认”。')
+                    : rateMissing
+                      ? t('这笔到账还没填汇率，批不了。请财务先在下面“汇率”里填好保存，再来审批。')
+                      : t('核对凭证、金额和拆分，没问题点“通过”，不对点“退回”写明原因。')}
+                </div>
+                {rateMissing && stepIsSp && (
+                  <div className="sp-rate" style={{ marginTop: 8 }}>
+                    <div style={{ fontWeight: 500 }}>
+                      {holdsStep ? t('财务没填汇率，请你填上和客户约定的汇率再确认：') : t('财务没填汇率，代业务员确认时要填上汇率：')}
+                    </div>
+                    <Space wrap style={{ marginTop: 4 }}>
+                      <span>{t('汇率（1 美元 = ? {cur}）', { cur: currency || t('原币') })}</span>
+                      <InputNumber
+                        className="sp-rate-input"
+                        min={0.000001}
+                        precision={4}
+                        style={{ width: 140 }}
+                        value={spRate}
+                        onChange={(v) => setSpRate(v == null ? null : Number(v))}
+                      />
+                      {amount > 0 && num(spRate) > 0 && <span className="hint">{t('折合 {usd}', { usd: usd(amount / num(spRate)) })}</span>}
+                    </Space>
+                  </div>
+                )}
+              </div>
             }
           />
         )}
@@ -1297,11 +1350,22 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                 : t('审批中，等{name}审批', { name: rflow.name(rStep) })
             }
             description={
-              rxEdit
-                ? stepIsSp
-                  ? t('业务员确认后才到下一级审批，全部批完才算到账。不知道是谁的钱可以点“请业务员填写”，他填好、你采用就算他确认了。')
-                  : t('批完才算到账（才进余额和报表、才能报款）。改了日期、账户、金额或汇率会从第一级重新审批。')
-                : undefined
+              rxEdit ? (
+                <div>
+                  <div>
+                    {stepIsSp
+                      ? t('业务员确认后才到下一级审批，全部批完才算到账。不知道是谁的钱可以点“请业务员填写”，他填好、你采用就算他确认了。')
+                      : t('批完才算到账（才进余额和报表、才能报款）。改了日期、账户、金额或汇率会从第一级重新审批。')}
+                  </div>
+                  {rateMissing && (
+                    <div style={{ marginTop: 4 }}>
+                      {stepIsSp
+                        ? t('汇率还空着：业务员确认时会填上。你知道汇率的也可以先在下面填好保存（补汇率不会重新审批）。')
+                        : t('汇率还空着，审批人批不了：请在下面“汇率”里填好保存（补汇率不会重新审批）。')}
+                    </div>
+                  )}
+                </div>
+              ) : undefined
             }
           />
         )}
@@ -1357,6 +1421,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                   <div key={i}>{line}</div>
                 ))}
                 {fillReq.note && <div>{t('业务员说明：{note}', { note: fillReq.note })}</div>}
+                {receipt?.fx_rate == null && fillReq.fx_rate != null && <div>{t('他填的汇率：{rate}', { rate: Number(fillReq.fx_rate) })}</div>}
                 {fillNewFiles > 0 && <div>{t('他传了 {n} 个凭证，采用后会挂到这笔到账上', { n: fillNewFiles })}</div>}
                 {rxEdit && (
                   <>
@@ -1488,8 +1553,13 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                 <Form.Item
                   name="fx_rate"
                   label={t('汇率（1 美元 = ? 原币）')}
-                  rules={[{ required: !isUsd, message: t('请填汇率') }]}
-                  extra={amount > 0 && rate > 0 ? t('折合 {usd}', { usd: usd(amount / rate) }) : undefined}
+                  extra={
+                    amount > 0 && rate > 0
+                      ? t('折合 {usd}', { usd: usd(amount / rate) })
+                      : !isUsd && !readOnly
+                        ? t('不知道可以先空着，业务员确认时填')
+                        : undefined
+                  }
                 >
                   <InputNumber
                     min={0.000001}

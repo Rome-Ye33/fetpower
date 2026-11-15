@@ -224,7 +224,7 @@ export type Database = {
           created_by: string | null
           currency: string
           flow: Json
-          fx_rate: number
+          fx_rate: number | null
           id: number
           import_batch_id: number | null
           import_hash: string | null
@@ -257,7 +257,7 @@ export type Database = {
           created_by?: string | null
           currency: string
           flow?: Json
-          fx_rate: number
+          fx_rate?: number | null
           id?: never
           import_batch_id?: number | null
           import_hash?: string | null
@@ -290,7 +290,7 @@ export type Database = {
           created_by?: string | null
           currency?: string
           flow?: Json
-          fx_rate?: number
+          fx_rate?: number | null
           id?: never
           import_batch_id?: number | null
           import_hash?: string | null
@@ -1168,7 +1168,7 @@ export type Database = {
       receipt_claims: {
         Row: {
           amount_orig: number | null
-          amount_usd: number
+          amount_usd: number | null
           claim_date: string
           claim_no: string
           created_at: string
@@ -1186,7 +1186,7 @@ export type Database = {
         }
         Insert: {
           amount_orig?: number | null
-          amount_usd: number
+          amount_usd?: number | null
           claim_date: string
           claim_no: string
           created_at?: string
@@ -1204,7 +1204,7 @@ export type Database = {
         }
         Update: {
           amount_orig?: number | null
-          amount_usd?: number
+          amount_usd?: number | null
           claim_date?: string
           claim_no?: string
           created_at?: string
@@ -2190,6 +2190,10 @@ export type Database = {
       }
       receipt_action: {
         Args: { p_action: string; p_id: number; p_note?: string }
+        Returns: undefined
+      }
+      receipt_fill_rate: {
+        Args: { p_approve?: boolean; p_id: number; p_rate: number }
         Returns: undefined
       }
       receipt_report_text: { Args: { p_receipt_id: number }; Returns: string }

@@ -16,10 +16,11 @@ import {
   partsPayload,
   partsTotal,
   RECEIPT_MODULE,
+  scopeOf,
   transferModule,
   transferSummary,
 } from '../lib/journal'
-import type { CashEntry, EntryKind, PartDraft } from '../lib/journal'
+import type { CashEntry, EntryKind, JournalScope, PartDraft } from '../lib/journal'
 import { fetchEntryLogs } from '../lib/journalLog'
 import type { JournalLog } from '../lib/journalLog'
 import type { Duty } from '../lib/perms'
@@ -32,12 +33,15 @@ import type { ReceiptPrefill } from './ReceiptEditor'
 import Vouchers from './Vouchers'
 
 // 收支录入：支出、其他收入、账户互转。一笔一行，存进 cash_entries（数据库 36 的 save_cash_entry）。
-// 两种用法：
+// 三种用法：
 // 1. 填银行流水（prefill 带 line_id）：银行账户先导流水再填，日期、账户、金额照银行的，不能改；保存后这条流水就“已填”。
-// 2. 记现金（没有 line_id）：只能选现金账户；银行账户的收付都从流水填，不在这里手工记，免得和流水重复。
+// 2. 记现金（没有 line_id，book = cash）：只能选现金账户。
+// 3. 记一笔银行交易（没有 line_id，book = bank，数据库 40）：只能选银行账户，先记下来“等流水”，不算进余额；
+//    流水导进来自动对上（号码对得上，或者同账户、同金额、3 天内一对一），分不清的由人在流水上「对上已记的」。
+//    先记的对上了流水以后，日期、账户、金额照银行的；对错了点「取消对上」，这一笔回到等流水，流水回到待填。
 // 客户的车款不在这里录：走到账录入，审批通过后自动出现在日记账里。
 // 账户互转录一次，两个账户各记一笔（转出账户记支出、转入账户记收入），两笔互相指着对方（peer_id）；币种不同就是货币兑换。
-// 互转里银行那一边：从流水填的就是那条流水；从现金这边先记的，银行那边“等流水”，流水导进来按同账户、同金额、3 天内自动对上。
+// 互转里银行那一边：从流水填的就是那条流水；先记的，银行那边“等流水”，流水导进来照上面的规则自动对上。
 // “保存并记下一笔”：日期、账户、业务模块留着，金额、摘要清空，出纳一天记几十笔现金不用每次重选。
 // 谁能改（数据库 36）：从流水填要能改“银行日记账”；记现金要能改“现金日记账”；改、删一笔要能改其中一边账户所在的那本。
 // 银行流水分工：对上的流水不是自己那一摊（填收款 / 填付款）的，只能看。
@@ -95,6 +99,7 @@ export default function CashEntryEditor({
   open,
   entryId,
   prefill,
+  book = 'cash',
   defaultAccountId,
   onClose,
   onReceipt,
@@ -102,6 +107,8 @@ export default function CashEntryEditor({
   open: boolean
   entryId: number | null
   prefill?: CashEntryPrefill | null
+  /** 哪本日记账里点的「记一笔」：cash 记现金（现金账户），bank 记一笔银行交易（银行账户，40）；默认 cash */
+  book?: JournalScope
   /** 明细页上选着的账户：新记一笔时默认用它 */
   defaultAccountId?: number
   onClose: (changed: boolean) => void
@@ -110,7 +117,7 @@ export default function CashEntryEditor({
 }) {
   const t = useT()
   const { message, modal } = App.useApp()
-  const { canEdit, mine } = useAuth()
+  const { canEdit, mine, duty } = useAuth()
   const canBank = canEdit('journal')
   const canCash = canEdit('cash')
   const { accounts, accountById, customers } = useRefData()
@@ -120,6 +127,8 @@ export default function CashEntryEditor({
   const [peer, setPeer] = useState<CashEntry | null>(null)
   // 改的时候：哪一边已经和银行流水对上了（那一边的账户、金额照银行的，不能改；对上了日期也不能改）
   const [linked, setLinked] = useState<{ out: boolean; in: boolean }>({ out: false, in: false })
+  /** 对上的是哪条流水（「取消对上」用，40） */
+  const [lineIds, setLineIds] = useState<{ out: number | null; in: number | null }>({ out: null, in: null })
   const [attachments, setAttachments] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [changed, setChanged] = useState(false)
@@ -146,7 +155,9 @@ export default function CashEntryEditor({
   }
   const outDir: Duty | null = linked.out ? (peer ? 'out' : ((entry?.direction as Duty | undefined) ?? null)) : null
   const editableAs = (duty: boolean) => !!entry && (sideOk(entry.account_id, outDir, duty) || (!!peer && sideOk(peer.account_id, linked.in ? 'in' : null, duty)))
-  const allowed = fromLine ? canBank && mine(lineCredit ? 'in' : 'out') : editing ? editableAs(true) : canCash
+  /** 记一笔银行交易（40）：银行账户先记，等流水 */
+  const bankBook = book === 'bank'
+  const allowed = fromLine ? canBank && mine(lineCredit ? 'in' : 'out') : editing ? editableAs(true) : bankBook ? canBank : canCash
   // 能改，只是按分工这条流水归别人管
   const dutyLocked = editing && !!entry && !editableAs(true) && editableAs(false)
   const readOnly = !allowed
@@ -169,17 +180,19 @@ export default function CashEntryEditor({
     setEntry(null)
     setPeer(null)
     setLinked({ out: false, in: false })
+    setLineIds({ out: null, in: null })
     setLogs([])
     setConflict(null)
     setParts(null)
     setRest(null)
     form.resetFields()
     if (entryId === null) {
-      const k = prefill?.kind ?? 'out'
+      // 记一笔银行交易：按分工，填收款的默认记收入
+      const k = prefill?.kind ?? (bankBook && duty === 'in' ? 'in' : 'out')
       setKind(k)
       setAttachments([])
-      // 记现金时，明细页上选着的是银行账户就不带过来（银行账户从流水填）
-      const def = defaultAccountId && isCashLike(accountById.get(defaultAccountId)) ? defaultAccountId : undefined
+      // 明细页上选着的账户是这本日记账的才带过来（记现金不带银行账户，记银行交易不带现金账户）
+      const def = defaultAccountId && scopeOf(accountById.get(defaultAccountId)) === book ? defaultAccountId : undefined
       form.setFieldsValue({
         entry_date: dayjs(prefill?.entry_date ?? todayAccra()),
         account_id: prefill?.line_id ? prefill.account_id : (prefill?.account_id ?? def),
@@ -229,6 +242,8 @@ export default function CashEntryEditor({
       })
       const on = new Set((lines ?? []).map((l) => l.entry_id))
       setLinked({ out: on.has(out.id), in: !!other && on.has(other.id) })
+      const lineOf = (id: number | undefined) => (lines ?? []).find((l) => l.entry_id === id)?.id ?? null
+      setLineIds({ out: lineOf(out.id), in: lineOf(other?.id) })
       setEntry(out)
       setPeer(other)
       setKind(other ? 'transfer' : (out.direction as EntryKind))
@@ -252,7 +267,7 @@ export default function CashEntryEditor({
     return () => {
       alive = false
     }
-  }, [open, entryId, prefill, defaultAccountId, accountById, form, reloadKey])
+  }, [open, entryId, prefill, book, bankBook, duty, defaultAccountId, accountById, form, reloadKey])
 
   const accountId = Form.useWatch('account_id', form)
   const toAccountId = Form.useWatch('to_account_id', form)
@@ -412,8 +427,8 @@ export default function CashEntryEditor({
       p.fee = v.fee || null
     }
     setSaving(true)
-    let { error } = await supabase.rpc('save_cash_entry', { p })
-    // 同一天、同账户、同金额已经有人记了一笔：问一下，确定了再记
+    let { data, error } = await supabase.rpc('save_cash_entry', { p })
+    // 同一天、同账户、同金额已经有人记了一笔（银行账户：同金额的流水都已经填了）：问一下，确定了再记
     if (error?.hint === 'dup_cash_entry') {
       setSaving(false)
       const again = await modal.confirm({
@@ -424,7 +439,7 @@ export default function CashEntryEditor({
       })
       if (!again) return
       setSaving(true)
-      ;({ error } = await supabase.rpc('save_cash_entry', { p: { ...p, confirm_dup: true } }))
+      ;({ data, error } = await supabase.rpc('save_cash_entry', { p: { ...p, confirm_dup: true } }))
     }
     setSaving(false)
     if (error) {
@@ -433,7 +448,18 @@ export default function CashEntryEditor({
     }
     notifyJournalChanged()
     setChanged(true)
-    message.success(kind === 'transfer' ? t('已保存，两个账户各记了一笔') : t('已保存'))
+    // 银行账户先记的（40）：流水已经导进来了就马上对上；没对上的等流水
+    const res = (data ?? {}) as { matched?: number[] }
+    const matchedN = Array.isArray(res.matched) ? res.matched.length : 0
+    const bankNew = !editing && !fromLine && [acct, kind === 'transfer' ? toAcct : undefined].some((a) => a && !isCashLike(a))
+    const base = kind === 'transfer' ? t('已保存，两个账户各记了一笔') : t('已保存')
+    message.success(
+      matchedN
+        ? `${base}${t('；银行流水里已经有，自动对上了')}`
+        : bankNew
+          ? `${base}${t('；银行那一边等流水，流水导进来自动对上')}`
+          : base,
+    )
     if (!next) {
       onClose(true)
       return
@@ -444,6 +470,23 @@ export default function CashEntryEditor({
     setSummaryTouched(false)
     setParts(null)
     form.setFieldsValue({ amount: undefined, counterparty: undefined, summary: undefined, bank_ref: undefined, cheque_no: undefined, note: undefined, to_amount: undefined, fee: undefined })
+  }
+
+  /** 取消对上（40）：先记的那一笔回到等流水，那条流水回到待填；以后自动配对不再把它们配在一起 */
+  const unpair = async (side: 'out' | 'in') => {
+    const lineId = lineIds[side]
+    if (!lineId) return
+    setSaving(true)
+    const { error } = await supabase.rpc('unpair_line_entry', { p_line_id: lineId })
+    setSaving(false)
+    if (error) {
+      fail(error)
+      return
+    }
+    notifyJournalChanged()
+    setChanged(true)
+    message.success(t('已取消对上：这一笔回到等流水，那条银行流水回到待填'))
+    setReloadKey((k) => k + 1)
   }
 
   const remove = async () => {
@@ -461,12 +504,24 @@ export default function CashEntryEditor({
   }
 
   const allAccounts = accountOptions(accounts, !editing)
-  // 记现金（不是从流水填）：支出、其他收入只能选现金账户
-  const cashAccounts = accountOptions(
-    accounts.filter((a) => isCashLike(a)),
+  // 支出、其他收入：记现金只能选现金账户，记银行交易只能选银行账户；改的时候换同一本日记账里的（银行的换银行、现金的换现金）
+  const sameBook = editing && entry ? scopeOf(accountById.get(entry.account_id)) : book
+  const bookAccounts = accountOptions(
+    accounts.filter((a) => scopeOf(a) === sameBook),
     !editing,
   )
-  const bankSide = kind === 'transfer' && !fromLine && ((acct && !isCashLike(acct)) || (toAcct && !isCashLike(toAcct)))
+  // 互转里银行那一边还没对上流水（先记的）：等流水
+  const bankSide =
+    kind === 'transfer' && !fromLine && ((acct && !isCashLike(acct) && !linked.out) || (toAcct && !isCashLike(toAcct) && !linked.in))
+  /** 这一笔是先记的、等流水的银行收支（40）：还没对上流水 */
+  const waitingEntry = editing && !!entry && kind !== 'transfer' && !!acct && !isCashLike(acct) && !linked.out
+  /** 先记的、已经对上流水的那几边（40）：能「取消对上」（和到账一起填的、从流水填的不行） */
+  const pairedSides: ('out' | 'in')[] = []
+  if (editing && !rest && entry) {
+    if (linked.out && entry.from_line === false && lineIds.out) pairedSides.push('out')
+    if (linked.in && peer?.from_line === false && lineIds.in) pairedSides.push('in')
+  }
+  const canUnpair = canBank && allowed && !conflict
   const cur = acct?.currency ?? ''
   const usdAmount = kind !== 'transfer' && amount && fxRate ? round2(amount / fxRate) : null
   const rateText =
@@ -482,7 +537,9 @@ export default function CashEntryEditor({
     ? t('{kind} {no}', { kind: t(KIND_LABEL[kind]), no: entry?.entry_no ?? '' })
     : fromLine
       ? t('填银行流水')
-      : t('记一笔现金')
+      : bankBook
+        ? t('记一笔银行交易')
+        : t('记一笔现金')
 
   const footer = (
     <div className="entry-footer">
@@ -574,7 +631,17 @@ export default function CashEntryEditor({
             // 分几种业务：互转不能分；收、付之间换了，业务模块不一样，重新分
             setParts(null)
           }}
-          options={(fromLine ? (withReceipt ? ['in'] : lineCredit ? ['in', 'transfer'] : ['out', 'transfer']) : (['out', 'in', 'transfer'] as EntryKind[])).map((k) => ({
+          options={(fromLine
+            ? withReceipt
+              ? ['in']
+              : lineCredit
+                ? ['in', 'transfer']
+                : ['out', 'transfer']
+            : bankBook
+              ? // 记一笔银行交易：按分工，填付款的记支出、填收款的记收入，互转都能记
+                (['out', 'in', 'transfer'] as EntryKind[]).filter((k) => k === 'transfer' || mine(k))
+              : (['out', 'in', 'transfer'] as EntryKind[])
+          ).map((k) => ({
             value: k as EntryKind,
             label: t(KIND_LABEL[k as EntryKind]),
           }))}
@@ -634,7 +701,7 @@ export default function CashEntryEditor({
           }
         />
       )}
-      {editing && !rest && (linked.out || linked.in) && (
+      {editing && !rest && (linked.out || linked.in) && !pairedSides.length && (
         <Alert
           type="success"
           showIcon
@@ -642,16 +709,66 @@ export default function CashEntryEditor({
           title={t('已经和银行流水对上：日期、账户、金额照银行的，不能改；要改请删掉这一笔（流水回到“待填”）再重新填。')}
         />
       )}
-      {!fromLine && !editing && kind !== 'transfer' && (
+      {pairedSides.length > 0 && (
+        <Alert
+          type="success"
+          showIcon
+          className="entry-tip"
+          title={t('先记的这一笔已经和银行流水对上：日期、账户、金额照银行的，不能改。')}
+          description={t('对错了点「取消对上」：这一笔回到“等流水”，那条流水回到“待填”，以后自动配对不会再把它们配在一起；再到那条流水上「对上已记的」选对的那一笔。')}
+          action={
+            canUnpair ? (
+              <Space orientation="vertical" size={4}>
+                {pairedSides.map((side) => (
+                  <Popconfirm
+                    key={side}
+                    title={t('取消对上？这一笔回到等流水，那条银行流水回到待填')}
+                    okText={t('取消对上')}
+                    cancelText={t('不了')}
+                    onConfirm={() => void unpair(side)}
+                  >
+                    <Button size="small" loading={saving}>
+                      {kind !== 'transfer' ? t('取消对上') : side === 'out' ? t('取消转出那一边的对上') : t('取消转入那一边的对上')}
+                    </Button>
+                  </Popconfirm>
+                ))}
+              </Space>
+            ) : undefined
+          }
+        />
+      )}
+      {waitingEntry && (
+        <Alert
+          type="info"
+          showIcon
+          className="entry-tip"
+          title={t('等流水：银行流水里还没有这一笔，不算进余额。')}
+          description={t('流水导进来自动对上：参考号 / 支票号对得上的，或者同金额、日期相差 3 天内只有这一笔的；分不清的在那条待填的流水上点「对上已记的」。')}
+        />
+      )}
+      {!fromLine && !editing && kind !== 'transfer' && !bankBook && (
         <Alert
           type="info"
           showIcon
           className="entry-tip"
           title={
             kind === 'in'
-              ? t('这里记现金的其他收入（维修、配件零售等）。客户的车款请在「到账录入」里录；银行账户的收付在「银行对账」里从流水填。')
-              : t('这里记现金账户的支出。银行账户的付款在「银行对账」里从流水填，不在这里手工记，免得和流水重复。')
+              ? t('这里记现金的其他收入（维修、配件零售等）。客户的车款请在「到账录入」里录；银行账户的收付在「银行日记账」里记。')
+              : t('这里记现金账户的支出。银行账户的付款在「银行日记账」里记一笔银行交易，或者导流水以后在「银行对账」里填。')
           }
+        />
+      )}
+      {!fromLine && !editing && kind !== 'transfer' && bankBook && (
+        <Alert
+          type="info"
+          showIcon
+          className="entry-tip"
+          title={
+            kind === 'in'
+              ? t('这里记利息、退款、理赔这些其他收入；客户的车款请在「到账录入」里录（要选大架号）。')
+              : t('先记下来，标「等流水」，对上银行流水之前不算进余额。')
+          }
+          description={t('银行流水导进来自动对上：参考号 / 支票号对得上的，或者同金额、日期相差 3 天内只有这一笔的。分不清的（比如同一天几笔一样的金额）在待填的流水上点「对上已记的」选。')}
         />
       )}
       {kind === 'in' && fromLine && !withReceipt && (
@@ -683,8 +800,8 @@ export default function CashEntryEditor({
                 >
                   <Select
                     showSearch={{ optionFilterProp: 'label' }}
-                    options={fromLine || editing ? allAccounts : cashAccounts}
-                    placeholder={t('现金账户')}
+                    options={fromLine ? allAccounts : bookAccounts}
+                    placeholder={sameBook === 'bank' ? t('银行账户') : t('现金账户')}
                     disabled={readOnly || fromLine || linked.out}
                   />
                 </Form.Item>
@@ -729,7 +846,11 @@ export default function CashEntryEditor({
                 </Col>
               )}
               <Col xs={24} sm={12}>
-                <Form.Item name="bank_ref" label={t('银行参考号 / 支票号')}>
+                <Form.Item
+                  name="bank_ref"
+                  label={t('银行参考号 / 支票号')}
+                  tooltip={acct && !isCashLike(acct) && !fromLine ? t('填了，银行流水导进来按号码对上，最准') : undefined}
+                >
                   <Input maxLength={80} />
                 </Form.Item>
               </Col>
@@ -748,7 +869,7 @@ export default function CashEntryEditor({
                 </Form.Item>
               </Col>
               <Col xs={24} sm={8}>
-                <Form.Item name="bank_ref" label={t('银行参考号')}>
+                <Form.Item name="bank_ref" label={t('银行参考号')} tooltip={bankSide ? t('填了，银行流水导进来按号码对上，最准') : undefined}>
                   <Input maxLength={80} />
                 </Form.Item>
               </Col>
@@ -824,12 +945,20 @@ export default function CashEntryEditor({
                     ({ getFieldValue }) => ({
                       validator: (_, v) => (v && v === getFieldValue('account_id') ? Promise.reject(new Error(t('转出、转入不能是同一个账户'))) : Promise.resolve()),
                     }),
-                    // 手工记的互转（现金日记账里记）：至少一边是现金账户；银行账户之间的在银行对账里从流水填
+                    // 手工记的互转：现金日记账里记的至少一边是现金账户；银行日记账里记的至少一边是银行账户（40）
                     ({ getFieldValue }) => ({
-                      validator: (_, v) =>
-                        !fromLine && !editing && v && !isCashLike(accountById.get(v)) && !isCashLike(accountById.get(getFieldValue('account_id')))
-                          ? Promise.reject(new Error(t('这里记的互转至少一边是现金账户；银行账户之间的转账在「银行对账」里从流水填')))
-                          : Promise.resolve(),
+                      validator: (_, v) => {
+                        if (fromLine || editing || !v) return Promise.resolve()
+                        const from = accountById.get(getFieldValue('account_id'))
+                        const to = accountById.get(v)
+                        if (bankBook)
+                          return from && isCashLike(from) && isCashLike(to)
+                            ? Promise.reject(new Error(t('这里记的互转至少一边是银行账户；现金账户之间的在「现金日记账」里记')))
+                            : Promise.resolve()
+                        return !isCashLike(to) && !isCashLike(from)
+                          ? Promise.reject(new Error(t('这里记的互转至少一边是现金账户；银行账户之间的转账在「银行日记账」里记')))
+                          : Promise.resolve()
+                      },
                     }),
                   ]}
                 >
@@ -845,7 +974,11 @@ export default function CashEntryEditor({
                 </Form.Item>
               </Col>
             </Row>
-            {bankSide && <div className="hint transfer-note">{t('银行那一边先记着“等流水”，银行流水导进来按同账户、同金额、3 天内自动对上，对上之前不算进银行余额。')}</div>}
+            {bankSide && (
+              <div className="hint transfer-note">
+                {t('银行那一边先记着“等流水”，对上之前不算进银行余额；银行流水导进来，参考号对得上的，或者同金额、日期相差 3 天内只有这一笔的，自动对上；分不清的在流水上点「对上已记的」。')}
+              </div>
+            )}
           </div>
         )}
         <Form.Item name="summary" label={t('摘要')} rules={[{ required: true, whitespace: true, message: t('请写摘要') }]}>

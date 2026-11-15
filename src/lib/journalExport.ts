@@ -6,6 +6,7 @@ import type { JournalLine } from './journal'
 // 日记账导出 Excel，列照 Rome 的《终端解款表》排（日期、单号、业务模块、客户 / 供应商、入账人员、摘要……拆分金额、回款银行）。
 // 一条流水分了几种业务（数据库 37）：每种一行，各写业务模块、客户、摘要、大架号、拆分金额；收入 / 支出、余额只写在第一行，
 // 所以收入、支出两列加起来还是等于银行流水。拆分金额每行都写，收为正、付为负，没分的 = 整笔（和解款表一样），按业务模块汇总加这一列。
+// 等流水的（数据库 40：先记了、银行流水里还没有）：照样列出来、写拆分金额，状态写“等流水”；收入 / 支出、余额空着，不算进合计。
 
 type T = (s: string, vars?: Record<string, string | number>) => string
 type Cell = string | number | null
@@ -80,8 +81,11 @@ export function ledgerSheet(o: LedgerExport): XLSX.WorkSheet {
   for (const l of o.lines) {
     const inn = Number(l.amount_in ?? 0)
     const out = Number(l.amount_out ?? 0)
-    sumIn += inn
-    sumOut += out
+    const waiting = !!l.waiting
+    if (!waiting) {
+      sumIn += inn
+      sumOut += out
+    }
     const sign = out ? -1 : 1
     const total = inn || out
     const rate = l.currency === 'USD' ? 1 : Number(l.fx_rate ?? 0) || null
@@ -104,8 +108,8 @@ export function ledgerSheet(o: LedgerExport): XLSX.WorkSheet {
       ref: l.bank_ref ?? '',
       status: l.fill_status ? t(l.fill_status) : '',
     }
-    // 第一行才写收入 / 支出、余额
-    const first = { in: inn || null, out: out || null, bal: o.balances?.get(l.key ?? `${l.source}-${l.source_id}`) ?? null }
+    // 第一行才写收入 / 支出、余额；等流水的不写（还没进银行）
+    const first: Record<string, Cell> = waiting ? {} : { in: inn || null, out: out || null, bal: o.balances?.get(l.key ?? `${l.source}-${l.source_id}`) ?? null }
     const parts = parseParts(l.parts)
     if (!parts.length) {
       rows.push({

@@ -4,6 +4,7 @@
 // 同一次操作（一个事务）的几行 txid 一样（比如一笔互转两边各一行），页面上合成一条。
 // 一笔分了几种业务的（37）：记了 / 删了说每一种的业务模块；改了几种业务说成「关税 1,000.00、手续费 510.00」；
 //   一条流水既录成到账、又把剩下的钱填成一笔收入（同一次操作），“填成了”那句写剩下多少。
+// 银行账户先记的（40）：流水导进来自动对上、人工「对上已记的」、「取消对上」（那一笔回到等流水）各说一句。
 import type { Database, Json } from './database.types'
 import { money } from './format'
 import { currentLang } from './i18n'
@@ -136,11 +137,13 @@ export function describeLog(r: JournalLog, t: Tr, accountName: (id: number) => s
       return t('删了 {no}：{what}，{module}', { no, what: entryWhat(), module: modulesText(d, t) })
     case 'fill':
       if (d.auto) return t('{line}自动对上了 {no}', { line: lineWhat(), no })
+      if (d.manual) return t('{line}手工对上了 {no}', { line: lineWhat(), no })
       // 和到账一起填的（37）：到账以外剩下的钱填成了这一笔
       if (ctx?.rest != null)
         return t('{line}里到账以外的 {cur} {amt} 填成了「{module}」（{no}）', { line: lineWhat(), cur, amt: money(ctx.rest), module: ctx.module ?? t(str(d.module)), no })
       return t('{line}填成了「{module}」（{no}）', { line: lineWhat(), module: ctx?.module ?? t(str(d.module)), no })
     case 'unfill':
+      if (d.unpair) return t('{line}取消了和 {no} 的对上：流水回到待填，{no} 回到等流水', { line: lineWhat(), no })
       return t('{line}回到待填（{no} 删了）', { line: lineWhat(), no })
     case 'match':
       return d.match_type === 'auto'
@@ -186,8 +189,12 @@ export function describeLog(r: JournalLog, t: Tr, accountName: (id: number) => s
 export function describeGroup(g: LogGroup, t: Tr, accountName: (id: number) => string): string[] {
   const seen = new Set<string>()
   const out: string[] = []
-  // 从流水填的：“填成了…”一句就够，不再另说“记了…”
-  const filled = new Set(g.rows.filter((r) => r.action === 'fill' && !(r.detail as Detail | null)?.auto).map((r) => r.entry_id))
+  // 从流水填的：“填成了…”一句就够，不再另说“记了…”（自动对上、手工对上的是先记的那一笔，两句都说）
+  const filled = new Set(
+    g.rows
+      .filter((r) => r.action === 'fill' && !(r.detail as Detail | null)?.auto && !(r.detail as Detail | null)?.manual)
+      .map((r) => r.entry_id),
+  )
   // 一笔互转改了摘要这类：两边各一行 update，说的话只差账户，合成一句不说账户；只有一边改的照样说是哪个账户
   const plain = (r: JournalLog) => describeLog(r, t, accountName, true)
   const updates = g.rows.filter((r) => r.action === 'update').map(plain)

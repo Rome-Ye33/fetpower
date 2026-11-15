@@ -440,9 +440,11 @@ export type Database = {
           entry_date: string
           entry_no: string
           fee_of: number | null
+          from_line: boolean
           fx_rate: number | null
           id: number
           module: string
+          not_lines: number[]
           note: string | null
           parts: Json | null
           peer_id: number | null
@@ -465,9 +467,11 @@ export type Database = {
           entry_date: string
           entry_no?: string
           fee_of?: number | null
+          from_line?: boolean
           fx_rate?: number | null
           id?: never
           module?: string
+          not_lines?: number[]
           note?: string | null
           parts?: Json | null
           peer_id?: number | null
@@ -490,9 +494,11 @@ export type Database = {
           entry_date?: string
           entry_no?: string
           fee_of?: number | null
+          from_line?: boolean
           fx_rate?: number | null
           id?: never
           module?: string
+          not_lines?: number[]
           note?: string | null
           parts?: Json | null
           peer_id?: number | null
@@ -1801,6 +1807,7 @@ export type Database = {
           source: string | null
           source_id: number | null
           summary: string | null
+          waiting: boolean | null
         }
         Relationships: []
       }
@@ -2109,6 +2116,7 @@ export type Database = {
       delete_cash_entry: { Args: { p_id: number; p_updated_at?: string }; Returns: undefined }
       journal_todo_count: { Args: never; Returns: Json }
       maintenance_status: { Args: never; Returns: Json }
+      pair_line_entry: { Args: { p_entry_id: number; p_line_id: number }; Returns: Json }
       set_maintenance: { Args: { p_active: boolean; p_note?: string }; Returns: Json }
       fill_statement_lines: { Args: { p: Json; p_line_ids: number[] }; Returns: number }
       import_cheques: { Args: { p_rows: Json }; Returns: Json }
@@ -2233,6 +2241,7 @@ export type Database = {
         Returns: undefined
       }
       today_accra: { Args: never; Returns: string }
+      unpair_line_entry: { Args: { p_line_id: number }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "finance" | "sales"

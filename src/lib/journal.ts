@@ -4,8 +4,10 @@
 //   收进来的配上到账（设备回款 / 配件回款）或填成其他收入、互转；付出去的填成付款或互转；没填的标“待填”，照样算余额。
 // 现金账户（cash、momo）没有流水：一笔笔记（支出、其他收入、互转），加上审批通过的现金到账。
 // 账户之间的钱（资金拨付、货币兑换、现金存现、银行取现）录一次“账户互转”，两边各记一笔；银行那一边没流水就“等流水”，导进来自动对上。
+// 银行账户也能先记一笔（数据库 40「记一笔银行交易」）：先“等流水”（日记账里一行，不算余额），流水导进来自动对上；
+//   自动配对只配分得清的（号码对得上，或者同账户、同金额、3 天内一对一），分不清的在待填的流水上点「对上已记的」选，配错了「取消对上」。
 // 读：v_journal（一笔一行）、journal_month（每个账户一段时间的期初 / 收 / 付 / 期末 / 银行余额）。
-// 写：save_cash_entry、delete_cash_entry、fill_statement_lines（勾几条一起填）、save_openings。
+// 写：save_cash_entry、delete_cash_entry、fill_statement_lines（勾几条一起填）、save_openings、pair_line_entry / unpair_line_entry（对上 / 取消对上）。
 import { useBadges } from './badges'
 import { round2 } from './format'
 import type { Duty } from './perms'
@@ -147,6 +149,7 @@ export type LedgerRow =
 /**
  * 给一个账户的明细算每一行的余额，每天最后加一行“本日合计”。
  * opening = 这段时间开始那天之前的余额；没选单个账户（opening 为 null）就不算余额。
+ * 等流水的（waiting，数据库 40：先记了、银行流水里还没有）照样一行，但不算进余额和合计，余额那一格空着。
  */
 export function buildLedger(lines: JournalLine[], opening: number | null, from: string, daySubtotal: boolean): LedgerRow[] {
   const out: LedgerRow[] = []
@@ -166,6 +169,10 @@ export function buildLedger(lines: JournalLine[], opening: number | null, from: 
     if (l.entry_date !== day) {
       closeDay()
       day = l.entry_date
+    }
+    if (l.waiting) {
+      out.push({ type: 'line', key: l.key ?? `${l.source}-${l.source_id}`, line: l, balance: null })
+      continue
     }
     const inc = Number(l.amount_in ?? 0)
     const exp = Number(l.amount_out ?? 0)
@@ -235,8 +242,8 @@ export const partsTotal = (rows: PartDraft[]) => round2(rows.reduce((s, r) => s 
 export const partsPayload = (rows: PartDraft[]) =>
   rows.map((r) => ({ module: r.module ?? null, counterparty: r.counterparty?.trim() || null, summary: r.summary?.trim() || null, amount: round2(Number(r.amount ?? 0)) }))
 
-/** 一条银行流水填了没有：待填（橙）、到账还在审批（金）；填好了不用标 */
-export const FILL_COLOR: Record<string, string> = { 待填: 'orange', 审批中: 'gold' }
+/** 一条银行流水填了没有：待填（橙）、到账还在审批（金）；填好了不用标。等流水（蓝，数据库 40）：先记了、银行流水里还没有 */
+export const FILL_COLOR: Record<string, string> = { 待填: 'orange', 审批中: 'gold', 等流水: 'blue' }
 
 /** 账户分组（和解款表主页一样：按公司分开，现金单独一组） */
 export function accountGroup(a: Account): string {

@@ -992,6 +992,13 @@ html[lang='en'] .logo-name {
 .journal-ledger .row-todo > td {
   background: #fffaf0;
 }
+/* 等流水：银行账户先记的、流水里还没有的，金额灰色、不算余额 */
+.journal-ledger .row-waiting > td {
+  background: #f8fafc;
+}
+.waiting-amt {
+  color: #8a8f98;
+}
 .todo-cell {
   display: flex;
   flex-direction: column;
@@ -1004,6 +1011,11 @@ html[lang='en'] .logo-name {
 }
 .tag-under {
   margin-top: 2px;
+}
+/* 业务模块那一栏窄：英文的长名字（Awaiting statement、Purchases - parts）在格子里折行，不盖住旁边一栏 */
+.journal-ledger .tag-under {
+  max-width: 100%;
+  white-space: normal;
 }
 /* 收支录入 */
 .entry-kind {

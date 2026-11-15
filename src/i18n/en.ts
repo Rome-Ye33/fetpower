@@ -525,6 +525,11 @@ const VALUES: Record<string, string> = {
   "请填汇率（1 美元 = ? {cur}）": "Enter the exchange rate (1 USD = ? {cur})",
   "这笔到账现在不在审批中，请刷新后再看": "This receipt is no longer in approval. Please refresh.",
   "填了汇率 {rate}": "Filled in the exchange rate: {rate}",
+  // 39 维护模式（数据库的总闸和开关发回来的报错）
+  "系统维护中，请稍后再登录": "The system is under maintenance. Please sign in again later.",
+  "只有管理员能开始或结束维护": "Only an admin can start or end maintenance.",
+  "要说明是开始还是结束维护": "Say whether to start or end maintenance.",
+  "维护说明最多 500 个字": "The maintenance note can be at most 500 characters.",
 }
 
 // 界面文字（检查脚本从代码里的 t('…') / tr('…') 找）
@@ -2123,6 +2128,40 @@ const UI: Record<string, string> = {
   "他填的汇率：{rate}": "Rate he entered: {rate}",
   "不知道可以先空着，业务员确认时填": "Leave it blank if you don't know; the salesperson fills it in when confirming",
   "财务没填汇率，请填上和客户约定的汇率": "Finance left the rate blank. Enter the rate agreed with the customer.",
+  // 39 维护模式
+  "系统维护中": "Under maintenance",
+  "管理员正在维护系统，这段时间暂时用不了。维护结束后这个页面会自动恢复，不用重新登录。": "An admin is doing maintenance on the system, so it can't be used for now. This page comes back by itself when maintenance ends; you don't need to sign in again.",
+  "管理员的说明": "Note from the admin",
+  "开始时间：{time}": "Started: {time}",
+  "刷新看看": "Check again",
+  "当前登录：{email}": "Signed in as {email}",
+  "还在维护中，请稍后再试": "Still under maintenance. Please try again later.",
+  "系统维护中，现在只有管理员能登录": "Under maintenance: only admins can sign in right now",
+  "已结束维护，大家的页面几秒内自动恢复": "Maintenance ended. Everyone's pages come back within a few seconds.",
+  "结束维护？": "End maintenance?",
+  "大家的页面几秒内自动恢复，攒下的待办提醒邮件随后发出。": "Everyone's pages come back within a few seconds, and the to-do reminder emails that were held back go out right after.",
+  "结束维护": "End maintenance",
+  "维护中（{time} 开始）：除管理员以外的人现在都登录不了、也用不了系统。": "Under maintenance (since {time}): nobody except admins can sign in or use the system right now.",
+  "维护中：除管理员以外的人现在都登录不了、也用不了系统。": "Under maintenance: nobody except admins can sign in or use the system right now.",
+  "已开始维护：除你以外的人现在都用不了系统": "Maintenance started: nobody but you can use the system now",
+  "说明已更新": "Note updated",
+  "维护模式": "Maintenance mode",
+  "维护中": "On",
+  "没在维护": "Off",
+  "改说明": "Edit note",
+  "开始维护": "Start maintenance",
+  "{time} 开始。除管理员以外的人现在都登录不了、也用不了系统；待办提醒邮件先攒着，结束后再发。": "Started {time}. Nobody except admins can sign in or use the system right now; to-do reminder emails are held back and sent after it ends.",
+  "除管理员以外的人现在都登录不了、也用不了系统；待办提醒邮件先攒着，结束后再发。": "Nobody except admins can sign in or use the system right now; to-do reminder emails are held back and sent after it ends.",
+  "给大家的说明：": "Note for everyone: ",
+  "改数据库、导入数据或上线新版本前，先点“开始维护”：除管理员以外的人都登录不了，已经登录的人页面会换成“系统维护中”，看不到也改不了任何东西；待办提醒邮件也先不发。维护完点“结束维护”，大家的页面自动恢复，不用重新登录，攒下的提醒邮件随后发出。": "Before changing the database, importing data or releasing a new version, click “Start maintenance”: nobody except admins can sign in, and people already signed in see “Under maintenance” instead of their page, so they can't see or change anything; to-do reminder emails are held back too. When you're done, click “End maintenance”: everyone's pages come back by themselves without signing in again, and the held-back reminder emails go out.",
+  "读不到维护状态，请刷新页面再试。": "Couldn't read the maintenance status. Refresh the page and try again.",
+  "数据库那一道拦截没有生效：现在只靠网页挡着。请让 Claude 检查。": "The database-level block is not active: only the web pages are blocking people right now. Ask Claude to check.",
+  "开始以后：": "Once started:",
+  "除管理员以外的人都登录不了；已经登录的人 5 秒内页面换成“系统维护中”，看不到也改不了任何东西": "Nobody except admins can sign in; within 5 seconds, people already signed in see “Under maintenance” instead of their page and can't see or change anything",
+  "你照常使用，每个页面顶上都会提示“维护中”，维护完记得点“结束维护”": "You keep working as usual. Every page shows “Under maintenance” at the top; remember to click “End maintenance” when you're done",
+  "待办提醒邮件先不发，结束后马上补发": "To-do reminder emails are held back and sent as soon as it ends",
+  "给大家的说明（可以不填，登录页和维护提示页上会显示）": "Note for everyone (optional; shown on the sign-in page and the maintenance page)",
+  "比如：系统升级，预计 15:00 恢复": "e.g. System upgrade, back around 15:00",
 }
 
 export const EN: Record<string, string> = { ...VALUES, ...UI }

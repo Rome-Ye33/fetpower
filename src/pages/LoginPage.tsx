@@ -3,6 +3,7 @@ import { Alert, App, Button, Form, Input, Tabs, Typography } from 'antd'
 import { useState } from 'react'
 import LangSwitch from '../components/LangSwitch'
 import Logo from '../components/Logo'
+import { MaintenanceLoginNotice } from '../components/Maintenance'
 import fetLogo from '../assets/fet-logo.jpg'
 import { accountCall, MIN_PASSWORD } from '../lib/account'
 import { errorText } from '../lib/errors'
@@ -85,6 +86,7 @@ export default function LoginPage() {
             {t('欢迎使用')}
           </Typography.Title>
           <Typography.Paragraph type="secondary">{t('请用管理员邀请的邮箱登录')}</Typography.Paragraph>
+          <MaintenanceLoginNotice />
           {notice && <Alert type="success" showIcon title={t('账号已开通，请用刚才的邮箱和密码登录。')} style={{ marginBottom: 12 }} />}
           <Tabs
             activeKey={tab}

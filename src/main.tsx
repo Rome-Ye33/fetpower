@@ -7,8 +7,10 @@ import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import App from './App'
+import { MaintenancePage } from './components/Maintenance'
 import { AuthProvider } from './lib/auth'
 import { LangProvider, useI18n } from './lib/i18n'
+import { MaintenanceGate, MaintenanceProvider } from './lib/maintenance'
 import { captureGo } from './lib/notify'
 import { RefDataProvider } from './lib/refdata'
 import './styles.css'
@@ -70,9 +72,14 @@ createRoot(document.getElementById('root')!).render(
         <AntApp>
           <HashRouter>
             <AuthProvider>
-              <RefDataProvider>
-                <App />
-              </RefDataProvider>
+              {/* 维护期间被挡在外面的人只看到维护提示页，里面的页面不挂上、不发请求 */}
+              <MaintenanceProvider>
+                <MaintenanceGate blockedView={<MaintenancePage />}>
+                  <RefDataProvider>
+                    <App />
+                  </RefDataProvider>
+                </MaintenanceGate>
+              </MaintenanceProvider>
             </AuthProvider>
           </HashRouter>
         </AntApp>

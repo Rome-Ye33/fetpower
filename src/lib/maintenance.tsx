@@ -37,6 +37,8 @@ const OFF: MaintStatus = { active: false, note: null, since: null, blocked: fals
  * 只是一行表按主键读一下；这段时间里别的请求成功过（也过了总闸）就不另外查；窗口在后台时不查
  */
 const POLL_MS = 5_000
+/** 读不到状态（网络、数据库忙、还没装 39）时越隔越久再试（10、20、40 秒……），最多 1 分钟一次：数据库忙的时候别让大家还每 5 秒来一下 */
+const MAX_GAP_MS = 60_000
 /** 两次因为请求被拒（423）去读状态，至少隔这么久 */
 const HIT_GAP_MS = 1_000
 /** 管理员切回窗口时，离上次读不到这么久就不重读 */
@@ -95,6 +97,8 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
   const lastRead = useRef(0)
   /** 上次读到的 gate：总闸真的装上了，别的请求成功才能当作“没被挡”的证明 */
   const gateOn = useRef(false)
+  /** 接连读不到几次了（读到了就清零） */
+  const fails = useRef(0)
   const running = useRef<{ uid: string; job: Promise<MaintStatus | null> } | null>(null)
 
   const refresh = useCallback(async (): Promise<MaintStatus | null> => {
@@ -111,10 +115,12 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
       else next = fromData(data)
       if (!next) {
         // 读不到：已经被挡着的照旧挡着（别因为一次网络问题放进去又挡出来），其余的当没在维护
+        fails.current += 1
         setFailed(true)
         setReadFor(forUid)
         return null
       }
+      fails.current = 0
       setFailed(false)
       // 被挡着的人等到维护结束：整页刷新，重新读资料、换上可能刚上线的新版本
       if (blockedRef.current && !next.blocked && forUid) {
@@ -177,15 +183,16 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(timer)
       timer = window.setTimeout(tick, ms)
     }
+    const gap = () => Math.min(POLL_MS * 2 ** fails.current, MAX_GAP_MS)
     function tick() {
       if (stopped || document.hidden) return
       const since = Date.now() - Math.max(gateOn.current ? lastApiOkAt() : 0, lastRead.current)
-      if (since < POLL_MS) {
-        arm(POLL_MS - since)
+      if (since < gap()) {
+        arm(gap() - since)
         return
       }
       void refresh().finally(() => {
-        if (!stopped) arm(POLL_MS)
+        if (!stopped) arm(gap())
       })
     }
     const onShow = () => {

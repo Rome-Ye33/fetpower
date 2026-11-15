@@ -2108,6 +2108,8 @@ export type Database = {
       }
       delete_cash_entry: { Args: { p_id: number; p_updated_at?: string }; Returns: undefined }
       journal_todo_count: { Args: never; Returns: Json }
+      maintenance_status: { Args: never; Returns: Json }
+      set_maintenance: { Args: { p_active: boolean; p_note?: string }; Returns: Json }
       fill_statement_lines: { Args: { p: Json; p_line_ids: number[] }; Returns: number }
       import_cheques: { Args: { p_rows: Json }; Returns: Json }
       import_vehicles: {

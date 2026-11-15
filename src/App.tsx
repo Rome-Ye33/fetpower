@@ -18,6 +18,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import ChangePassword from './components/ChangePassword'
 import LangSwitch from './components/LangSwitch'
 import Logo from './components/Logo'
+import { MaintenanceBanner } from './components/Maintenance'
 import NotifySettings from './components/NotifySettings'
 import { ROLE_LABEL, useAuth } from './lib/auth'
 import { useChequeAlert } from './lib/cheques'
@@ -217,6 +218,8 @@ export default function App() {
           </Space>
         </Header>
         <Content className="app-content">
+          {/* 维护开着时管理员每个页面顶上都有提示和“结束维护”，免得忘了关 */}
+          <MaintenanceBanner />
           <div className="app-page">
             <Suspense fallback={<FullSpin />}>
               <Routes>

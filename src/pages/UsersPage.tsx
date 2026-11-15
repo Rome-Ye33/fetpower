@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { accountCall, MIN_PASSWORD, randomPassword } from '../lib/account'
 import FlowEditor from '../components/FlowEditor'
+import { MaintenanceCard } from '../components/Maintenance'
 import PermEditor, { PermSummary } from '../components/PermEditor'
 import type { PermTarget } from '../components/PermEditor'
 import { ROLE_LABEL, useAuth } from '../lib/auth'
@@ -342,6 +343,7 @@ export default function UsersPage() {
       <div className="page-title">
         <h2>{t('用户与权限')}</h2>
       </div>
+      <MaintenanceCard />
       <Alert
         type="info"
         showIcon

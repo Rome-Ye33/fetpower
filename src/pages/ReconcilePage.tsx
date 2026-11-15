@@ -17,6 +17,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   Upload,
 } from 'antd'
@@ -28,6 +29,7 @@ import * as XLSX from 'xlsx'
 import CashEntryEditor from '../components/CashEntryEditor'
 import type { CashEntryPrefill } from '../components/CashEntryEditor'
 import JournalLogList from '../components/JournalLogList'
+import PairEntryModal from '../components/PairEntryModal'
 import ReceiptEditor from '../components/ReceiptEditor'
 import type { ReceiptPrefill } from '../components/ReceiptEditor'
 import { useAuth } from '../lib/auth'
@@ -39,6 +41,8 @@ import { supabase } from '../lib/supabase'
 import { moduleColor, moduleOptions, notifyJournalChanged } from '../lib/journal'
 import { fetchLineLogs } from '../lib/journalLog'
 import type { JournalLog } from '../lib/journalLog'
+import { useWaitingIndex } from '../lib/journalPair'
+import type { PairLine } from '../lib/journalPair'
 import type { Duty } from '../lib/perms'
 import { DATE_FORMATS, findHeaderRow, guessMapping, matchAccount, toLines } from '../lib/statement'
 import type { ImportResult, Mapping, ParsedLine } from '../lib/statement'
@@ -57,6 +61,35 @@ type RestLine = {
   payer_summary: string | null
   bank_ref: string | null
 }
+/** 一条待填的流水 → 「对上已记的」要对上的那条（40） */
+const pairLine = (l: StatementLine): PairLine => ({
+  line_id: l.id as number,
+  account_id: l.account_id as number,
+  amount: Number(l.amount_orig),
+  entry_date: l.line_date ?? '',
+  currency: l.currency ?? '',
+  bank_summary: l.payer_summary,
+})
+
+/** 「对上已记的」按钮（40）：这个账户里有记了、等流水的同方向收支才出；同金额的有就是主按钮 */
+function PairButton({ count, onClick }: { count: { any: number; same: number }; onClick: () => void }) {
+  const t = useT()
+  if (!count.any) return null
+  return (
+    <Tooltip
+      title={
+        count.same
+          ? t('这个账户有 {n} 笔记了、等流水的金额一样，选是哪一笔', { n: count.same })
+          : t('这个账户有 {n} 笔记了、等流水的（金额不一样）', { n: count.any })
+      }
+    >
+      <Button size="small" type={count.same ? 'primary' : 'default'} onClick={onClick}>
+        {t('对上已记的')}
+      </Button>
+    </Tooltip>
+  )
+}
+
 const restLine = (l: StatementLine): RestLine => ({
   line_id: l.id as number,
   account_id: l.account_id,
@@ -128,7 +161,7 @@ export default function ReconcilePage() {
         />
       </div>
       <Typography.Paragraph type="secondary">
-        {t('先导银行流水，再一条一条填：收进来的按“同账户、同金额、日期相差 3 天内”自动和已录的到账配对，配不上的在「银行有、没人报」里录成到账；付出去的在「付款待填」里填业务模块和摘要。填好的流水就是银行日记账。')}
+        {t('先导银行流水，再一条一条填。导进来的流水自动对上已经录了的（到账、银行日记账里先记的收付）：先按支票号 / 参考号，再按同账户、同金额、日期相差 3 天内，只对上分得清的（一条流水只有一笔对得上）；分不清的（比如同一天几笔一样的金额）留着，由人点「对上已记的」或「关联已录的」选。配不上的收款在「银行有、没人报」里录成到账；付出去的在「付款待填」里填业务模块和摘要。填好的流水就是银行日记账。')}
       </Typography.Paragraph>
       <Tabs
         activeKey={tab}
@@ -357,6 +390,9 @@ function UnmatchedLines({
   const [ignoreFor, setIgnoreFor] = useState<StatementLine | null>(null)
   const [ignoreNote, setIgnoreNote] = useState('')
   const [matching, setMatching] = useState(false)
+  // 对上已记的（40）：银行日记账里先记的收入；到账还是走「关联已录的」
+  const [pairFor, setPairFor] = useState<PairLine | null>(null)
+  const [pairVer, setPairVer] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -410,6 +446,7 @@ function UnmatchedLines({
   }
 
   const bulk = useLineBulk(rows, () => void load())
+  const waitIndex = useWaitingIndex(canFill && rows.length > 0, accountId, version + pairVer)
 
   const columns: ColumnsType<StatementLine> = [
     { title: t('银行日期'), dataIndex: 'line_date', width: 104, ...textCol<StatementLine>((l) => l.line_date) },
@@ -432,42 +469,47 @@ function UnmatchedLines({
     columns.push({
       title: t('处理'),
       width: 330,
-      render: (_, l) => (
-        <Space size={4} wrap>
-          {canCreate && (
-            <Button size="small" type="primary" onClick={() => onCreate(l)}>
-              {t('录成到账')}
-            </Button>
-          )}
-          {rcEdit && (
-            <Button size="small" onClick={() => setLinkFor(l)}>
-              {t('关联已录的')}
-            </Button>
-          )}
-          {canFill && (
-            <Button size="small" onClick={() => onEntry(l, 'in')}>
-              {t('其他收入')}
-            </Button>
-          )}
-          {canFill && (
-            <Button size="small" onClick={() => onEntry(l, 'transfer')}>
-              {t('互转')}
-            </Button>
-          )}
-          {rcEdit && (
-            <Button
-              size="small"
-              type="text"
-              onClick={() => {
-                setIgnoreNote('')
-                setIgnoreFor(l)
-              }}
-            >
-              {t('忽略')}
-            </Button>
-          )}
-        </Space>
-      ),
+      render: (_, l) => {
+        const w = waitIndex(l.account_id, Number(l.amount_orig), { entry: canFill, receipt: false })
+        return (
+          <Space size={4} wrap>
+            {w.same > 0 && <PairButton count={w} onClick={() => setPairFor(pairLine(l))} />}
+            {canCreate && (
+              <Button size="small" type={w.same ? 'default' : 'primary'} onClick={() => onCreate(l)}>
+                {t('录成到账')}
+              </Button>
+            )}
+            {rcEdit && (
+              <Button size="small" onClick={() => setLinkFor(l)}>
+                {t('关联已录的')}
+              </Button>
+            )}
+            {canFill && (
+              <Button size="small" onClick={() => onEntry(l, 'in')}>
+                {t('其他收入')}
+              </Button>
+            )}
+            {canFill && (
+              <Button size="small" onClick={() => onEntry(l, 'transfer')}>
+                {t('互转')}
+              </Button>
+            )}
+            {!w.same && <PairButton count={w} onClick={() => setPairFor(pairLine(l))} />}
+            {rcEdit && (
+              <Button
+                size="small"
+                type="text"
+                onClick={() => {
+                  setIgnoreNote('')
+                  setIgnoreFor(l)
+                }}
+              >
+                {t('忽略')}
+              </Button>
+            )}
+          </Space>
+        )
+      },
     })
 
   return (
@@ -494,6 +536,16 @@ function UnmatchedLines({
         onClose={(ok) => {
           setLinkFor(null)
           if (ok) void load()
+        }}
+      />
+      <PairEntryModal
+        line={pairFor}
+        onClose={(ok) => {
+          setPairFor(null)
+          if (ok) {
+            setPairVer((x) => x + 1)
+            void load()
+          }
         }}
       />
       <Modal open={!!ignoreFor} title={t('忽略这条流水')} okText={t('忽略')} onOk={ignore} onCancel={() => setIgnoreFor(null)}>
@@ -531,6 +583,9 @@ function UnfilledPayments({
   const [ignoreFor, setIgnoreFor] = useState<StatementLine | null>(null)
   const [ignoreNote, setIgnoreNote] = useState('')
   const [batch, setBatch] = useState<StatementLine[] | null>(null)
+  // 对上已记的（40）：银行日记账里先记的付款
+  const [pairFor, setPairFor] = useState<PairLine | null>(null)
+  const [pairVer, setPairVer] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -575,6 +630,7 @@ function UnfilledPayments({
   }
 
   const bulk = useLineBulk(rows, () => void load(), canFill)
+  const waitIndex = useWaitingIndex(canFill && rows.length > 0, accountId, version + pairVer)
   const total = new Map<string, number>()
   for (const r of rows) total.set(r.currency ?? '', round2((total.get(r.currency ?? '') ?? 0) - Number(r.amount_orig)))
 
@@ -604,33 +660,38 @@ function UnfilledPayments({
   if (rcEdit || canFill)
     columns.push({
       title: t('处理'),
-      width: 220,
-      render: (_, l) => (
-        <Space size={4}>
-          {canFill && (
-            <Button size="small" type="primary" onClick={() => onFill(l, 'out')}>
-              {t('填付款')}
-            </Button>
-          )}
-          {canFill && (
-            <Button size="small" onClick={() => onFill(l, 'transfer')}>
-              {t('互转')}
-            </Button>
-          )}
-          {rcEdit && (
-            <Button
-              size="small"
-              type="text"
-              onClick={() => {
-                setIgnoreNote('')
-                setIgnoreFor(l)
-              }}
-            >
-              {t('忽略')}
-            </Button>
-          )}
-        </Space>
-      ),
+      width: 300,
+      render: (_, l) => {
+        const w = waitIndex(l.account_id, Number(l.amount_orig), { entry: canFill, receipt: false })
+        return (
+          <Space size={4} wrap>
+            {w.same > 0 && <PairButton count={w} onClick={() => setPairFor(pairLine(l))} />}
+            {canFill && (
+              <Button size="small" type={w.same ? 'default' : 'primary'} onClick={() => onFill(l, 'out')}>
+                {t('填付款')}
+              </Button>
+            )}
+            {canFill && (
+              <Button size="small" onClick={() => onFill(l, 'transfer')}>
+                {t('互转')}
+              </Button>
+            )}
+            {!w.same && <PairButton count={w} onClick={() => setPairFor(pairLine(l))} />}
+            {rcEdit && (
+              <Button
+                size="small"
+                type="text"
+                onClick={() => {
+                  setIgnoreNote('')
+                  setIgnoreFor(l)
+                }}
+              >
+                {t('忽略')}
+              </Button>
+            )}
+          </Space>
+        )
+      },
     })
 
   return (
@@ -645,7 +706,7 @@ function UnfilledPayments({
         )}
         {bulk.button}
         <span className="hint">
-          {t('银行流水里付出去、还没填的。点「填付款」选业务模块、写摘要（日期、账户、金额照银行的）；转到自己别的账户的点「互转」；手续费这类小额的勾上几条「一起填」；银行冲正之类不算收付的点「忽略」。')}
+          {t('银行流水里付出去、还没填的。点「填付款」选业务模块、写摘要（日期、账户、金额照银行的）；在银行日记账里先记了的点「对上已记的」；转到自己别的账户的点「互转」；手续费这类小额的勾上几条「一起填」；银行冲正之类不算收付的点「忽略」。')}
         </span>
       </Space>
       {rows.length > 0 && (
@@ -680,6 +741,16 @@ function UnfilledPayments({
           setBatch(null)
           if (ok) {
             bulk.clear()
+            void load()
+          }
+        }}
+      />
+      <PairEntryModal
+        line={pairFor}
+        onClose={(ok) => {
+          setPairFor(null)
+          if (ok) {
+            setPairVer((x) => x + 1)
             void load()
           }
         }}

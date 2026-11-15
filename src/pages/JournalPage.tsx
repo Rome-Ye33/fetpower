@@ -19,6 +19,7 @@ import CashEntryEditor from '../components/CashEntryEditor'
 import type { CashEntryPrefill } from '../components/CashEntryEditor'
 import LogLines from '../components/LogLines'
 import OpeningEditor from '../components/OpeningEditor'
+import PairEntryModal from '../components/PairEntryModal'
 import PartsList from '../components/PartsList'
 import ReceiptEditor from '../components/ReceiptEditor'
 import type { ReceiptPrefill } from '../components/ReceiptEditor'
@@ -49,6 +50,8 @@ import { ledgerSheet, saveBook, summarySheet } from '../lib/journalExport'
 import type { SummaryExportRow } from '../lib/journalExport'
 import { describeGroup, groupLogs, LOG_KINDS } from '../lib/journalLog'
 import type { JournalLog, LogGroup } from '../lib/journalLog'
+import { pairLineOf, useWaitingIndex } from '../lib/journalPair'
+import type { PairLine } from '../lib/journalPair'
 import { accountOptions, useRefData } from '../lib/refdata'
 import { supabase } from '../lib/supabase'
 import type { Account } from '../lib/supabase'
@@ -63,6 +66,8 @@ import type { Account } from '../lib/supabase'
 // 修改记录 = 这本日记账里谁、什么时候、做了什么（数据库触发器记的）。
 // 一行里分了几种业务的（数据库 37：付款分关税 + 手续费、收款里有车款也有代收代付……）：业务模块写每一种，
 //   摘要下面点「分 N 种业务」看每种的客户、摘要、大架号、金额，点一种打开它那一张（到账 / 收支）。
+// 银行日记账也能「记一笔银行交易」（数据库 40）：先记的标「等流水」，一行照样列出来，不算进余额、合计；
+//   流水导进来自动对上（号码对得上，或者同账户、同金额、3 天内一对一）；分不清的在待填的流水上点「对上已记的」选。
 
 type Editor = { open: boolean; id: number | null; prefill: CashEntryPrefill | null }
 
@@ -126,9 +131,9 @@ export default function JournalPage({ scope }: { scope: JournalScope }) {
               {t('期初余额')}
             </Button>
           )}
-          {jEdit && scope === 'cash' && (
+          {jEdit && (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditor({ open: true, id: null, prefill: null })}>
-              {t('记一笔现金')}
+              {scope === 'cash' ? t('记一笔现金') : t('记一笔银行交易')}
             </Button>
           )}
         </Space>
@@ -188,6 +193,7 @@ export default function JournalPage({ scope }: { scope: JournalScope }) {
         open={editor.open}
         entryId={editor.id}
         prefill={editor.prefill}
+        book={scope}
         defaultAccountId={accountId}
         onClose={(changed) => {
           setEditor({ open: false, id: null, prefill: null })
@@ -461,7 +467,7 @@ function SummaryTab({
               </Tooltip>
             )}
             {Number(r.m.waiting_n) > 0 && (
-              <Tooltip title={t('已经录了（到账或互转），银行流水里还没有，共 {amt}；流水导进来会自动对上，现在不算进余额', { amt: money(r.m.waiting_amount) })}>
+              <Tooltip title={t('已经记了（到账、先记的收付、互转），银行流水里还没有；流水导进来会自动对上，对上之前不算进余额')}>
                 <Tag color="blue" className="tag-mini">
                   {t('{n} 笔等流水', { n: r.m.waiting_n })}
                 </Tag>
@@ -594,7 +600,7 @@ function SummaryTab({
       />
       <Typography.Paragraph type="secondary" className="journal-note">
         {scope === 'bank'
-          ? t('银行账户的收付就是导进来的银行流水（在「银行对账」里导入、填写），余额跟着银行走；还没填的流水也算进余额，标「待填」。现金存现、银行取现记一次，银行日记账和现金日记账都会出现。')
+          ? t('银行账户的收付以导进来的银行流水为准（在「银行对账」里导入、填写），余额跟着银行走；还没填的流水也算进余额，标「待填」。也可以先「记一笔银行交易」，标「等流水」，流水导进来自动对上，对上之前不算进余额。现金存现、银行取现记一次，银行日记账和现金日记账都会出现。')
           : t('现金、momo 账户的收付在这里一笔一笔记；客户交的现金走到账录入，审批通过后自动进来。存进银行、从银行取现记成「账户互转」，银行那一边等流水导进来自动对上。')}
       </Typography.Paragraph>
     </div>
@@ -639,6 +645,10 @@ function LedgerTab({
   const [loading, setLoading] = useState(false)
   const [modules, setModules] = useState<string[]>([])
   const [onlyTodo, setOnlyTodo] = useState(false)
+  /** 只看等流水的（40：先记了、银行流水里还没有） */
+  const [onlyWaiting, setOnlyWaiting] = useState(false)
+  /** 「对上已记的」：哪条待填的流水 */
+  const [pairFor, setPairFor] = useState<PairLine | null>(null)
   const [q, setQ] = useState('')
   const [daySub, setDaySub] = useState(true)
   /** 分了几种业务的行：点开了哪几行；allParts = 全部展开 */
@@ -689,7 +699,7 @@ function LedgerTab({
 
   // 业务模块、待填、搜索只是筛着看：一筛余额就不连续了，所以筛的时候不显示余额和小计
   const s = cleanSearch(q).toLowerCase()
-  const filtering = modules.length > 0 || onlyTodo || !!s
+  const filtering = modules.length > 0 || onlyTodo || onlyWaiting || !!s
   // 分了几种业务的：里面有选的业务模块就算；搜索也搜每种的客户、摘要、大架号、金额
   const partsText = (l: JournalLine) =>
     parseParts(l.parts)
@@ -699,6 +709,7 @@ function LedgerTab({
     (l) =>
       (!modules.length || lineModules(l).some((m) => modules.includes(m))) &&
       (!onlyTodo || l.fill_status === '待填') &&
+      (!onlyWaiting || !!l.waiting) &&
       (!s ||
         `${l.doc_no ?? ''} ${l.summary ?? ''} ${l.bank_summary ?? ''} ${l.counterparty ?? ''} ${l.amount_in ?? ''} ${l.amount_out ?? ''} ${partsText(l)}`
           .toLowerCase()
@@ -706,15 +717,24 @@ function LedgerTab({
   )
   const anyParts = lines.some((l) => l.parts)
   const todoN = lines.filter((l) => l.fill_status === '待填').length
+  const waitN = lines.filter((l) => l.waiting).length
   const ledger: LedgerRow[] = buildLedger(shown, acct && head && !filtering ? Number(head.opening) : null, range[0].format('YYYY-MM-DD'), daySub && !filtering)
-  const inSum = round2(shown.reduce((x, l) => x + Number(l.amount_in ?? 0), 0))
-  const outSum = round2(shown.reduce((x, l) => x + Number(l.amount_out ?? 0), 0))
+  // 合计不算等流水的（还没进银行）
+  const counted = shown.filter((l) => !l.waiting)
+  const inSum = round2(counted.reduce((x, l) => x + Number(l.amount_in ?? 0), 0))
+  const outSum = round2(counted.reduce((x, l) => x + Number(l.amount_out ?? 0), 0))
   const closing = head ? Number(head.closing) : null
   const status = acct && head ? acctStatus(head, isCashLike(acct)) : null
   const showBalance = !!accountId && !filtering
-  // 不是美元的，金额上悬停看折多少美元
-  const usdTip = (l: JournalLine) =>
-    l.currency !== 'USD' && l.amount_usd ? t('≈ {usd}（汇率 {rate}）', { usd: usd(l.amount_usd), rate: Number(l.fx_rate ?? 0) }) : undefined
+  // 不是美元的，金额上悬停看折多少美元；等流水的说一句不算进余额
+  const usdTip = (l: JournalLine) => {
+    const u = l.currency !== 'USD' && l.amount_usd ? t('≈ {usd}（汇率 {rate}）', { usd: usd(l.amount_usd), rate: Number(l.fx_rate ?? 0) }) : null
+    const w = l.waiting ? t('等流水：对上银行流水之前不算进余额、合计') : null
+    return u || w ? <div className="pre-line">{[w, u].filter(Boolean).join('\n')}</div> : undefined
+  }
+  // 待填的流水能对上哪些等流水的（40）：收支要能改“银行日记账”，到账要能改“银行对账”
+  const waitIndex = useWaitingIndex(scope === 'bank' && todoN > 0 && (jEdit || rcEdit), accountId, version)
+  const signedOf = (l: JournalLine) => (l.amount_in ? Number(l.amount_in) : -Number(l.amount_out ?? 0))
 
   // 待填的流水：付出去的填付款或互转；收进来的录成到账、其他收入或互转。按分工：不是自己那一摊的不出按钮
   const fillButtons = (l: JournalLine) => {
@@ -724,10 +744,27 @@ function LedgerTab({
         {label}
       </Button>
     )
+    // 记了、等流水的里面有能对上的（40）：同金额的有就把「对上已记的」放最前面
+    const w = waitIndex(l.account_id, signedOf(l), { entry: jEdit, receipt: rcEdit })
+    const pair = w.any > 0 && (
+      <Tooltip
+        key="pair"
+        title={
+          w.same
+            ? t('这个账户有 {n} 笔记了、等流水的金额一样，选是哪一笔', { n: w.same })
+            : t('这个账户有 {n} 笔记了、等流水的（金额不一样）', { n: w.any })
+        }
+      >
+        <Button size="small" type={w.same ? 'primary' : 'default'} ghost={!!w.same} onClick={() => setPairFor(pairLineOf(l))}>
+          {t('对上已记的')}
+        </Button>
+      </Tooltip>
+    )
+    const first = !w.same
     const list = l.amount_out
-      ? [jEdit && btn('out', t('填付款'), true), jEdit && btn('transfer', t('互转'))]
-      : [rxEdit && rcEdit && btn('receipt', t('录成到账'), true), jEdit && btn('in', t('其他收入')), jEdit && btn('transfer', t('互转'))]
-    return <span className="fill-buttons">{list.filter(Boolean)}</span>
+      ? [jEdit && btn('out', t('填付款'), first), jEdit && btn('transfer', t('互转'))]
+      : [rxEdit && rcEdit && btn('receipt', t('录成到账'), first), jEdit && btn('in', t('其他收入')), jEdit && btn('transfer', t('互转'))]
+    return <span className="fill-buttons">{w.same ? [pair, ...list].filter(Boolean) : [...list, pair].filter(Boolean)}</span>
   }
 
   // 导出 Excel（照《终端解款表》）：表里现在显示的这些（账户、日期、筛选都照页面），分了几种业务的每种一行
@@ -773,7 +810,7 @@ function LedgerTab({
       : []),
     {
       title: t('业务模块'),
-      width: 104,
+      width: 116,
       render: (_, r) => {
         if (r.type !== 'line') return null
         const l = r.line
@@ -795,6 +832,13 @@ function LedgerTab({
               <Tooltip title={t('这条流水已经录成到账，到账还在审批')}>
                 <Tag color={FILL_COLOR['审批中']} className="tag-under">
                   {t('审批中')}
+                </Tag>
+              </Tooltip>
+            )}
+            {l.waiting && (
+              <Tooltip title={t('记了、银行流水里还没有：流水导进来自动对上，对上之前不算进余额')}>
+                <Tag color={FILL_COLOR['等流水']} className="tag-under">
+                  {t('等流水')}
                 </Tag>
               </Tooltip>
             )}
@@ -873,7 +917,7 @@ function LedgerTab({
         r.type === 'line' ? (
           r.line.amount_in ? (
             <Tooltip title={usdTip(r.line)}>
-              <span className="num text-ok">{money(r.line.amount_in)}</span>
+              <span className={r.line.waiting ? 'num waiting-amt' : 'num text-ok'}>{money(r.line.amount_in)}</span>
             </Tooltip>
           ) : null
         ) : r.type === 'day' ? (
@@ -888,7 +932,7 @@ function LedgerTab({
         r.type === 'line' ? (
           r.line.amount_out ? (
             <Tooltip title={usdTip(r.line)}>
-              <span className="num text-warn">{money(r.line.amount_out)}</span>
+              <span className={r.line.waiting ? 'num waiting-amt' : 'num text-warn'}>{money(r.line.amount_out)}</span>
             </Tooltip>
           ) : null
         ) : r.type === 'day' ? (
@@ -903,6 +947,13 @@ function LedgerTab({
             align: 'right' as const,
             render: (_: unknown, r: LedgerRow) => {
               if (r.type === 'day') return null
+              // 等流水的不算进余额（40）
+              if (r.type === 'line' && r.line.waiting)
+                return (
+                  <Tooltip title={t('等流水：对上银行流水之前不算进余额')}>
+                    <span className="hint">—</span>
+                  </Tooltip>
+                )
               // 银行流水上自己带着余额：和算出来的不一样就标红（漏导了流水或期初不对）
               const bank = r.type === 'line' ? r.line.bank_balance : null
               const off = bank != null && r.balance != null && Math.abs(round2(r.balance - Number(bank))) >= 0.005
@@ -950,6 +1001,11 @@ function LedgerTab({
         <Checkbox checked={onlyTodo} onChange={(e) => setOnlyTodo(e.target.checked)}>
           {t('只看待填（{n}）', { n: todoN })}
         </Checkbox>
+        {scope === 'bank' && (waitN > 0 || onlyWaiting) && (
+          <Checkbox checked={onlyWaiting} onChange={(e) => setOnlyWaiting(e.target.checked)}>
+            {t('只看等流水（{n}）', { n: waitN })}
+          </Checkbox>
+        )}
         <span className="switch-label">
           <Switch size="small" checked={daySub} onChange={setDaySub} /> {t('按日小计')}
         </span>
@@ -995,10 +1051,8 @@ function LedgerTab({
           type="info"
           showIcon
           className="filters"
-          title={t('还有 {n} 笔已经录了、银行流水里还没有（共 {cur} {amt}），等流水导进来自动对上，现在不算进余额。', {
+          title={t('还有 {n} 笔记了、银行流水里还没有的（标「等流水」），不算进余额。流水导进来自动对上：参考号 / 支票号对得上的，或者同金额、日期相差 3 天内只有一笔的；分不清的在待填的流水上点「对上已记的」选。', {
             n: head.waiting_n,
-            cur: acct.currency,
-            amt: money(head.waiting_amount),
           })}
         />
       )}
@@ -1025,7 +1079,15 @@ function LedgerTab({
         pagination={{ defaultPageSize: 100, showSizeChanger: true, pageSizeOptions: [50, 100, 200, 500], showTotal: () => t('共 {n} 笔', { n: shown.length }) }}
         className="journal-ledger"
         rowClassName={(r) =>
-          r.type === 'day' ? 'row-day' : r.type === 'opening' ? 'row-opening' : r.line.fill_status === '待填' ? 'row-todo' : 'clickable-row'
+          r.type === 'day'
+            ? 'row-day'
+            : r.type === 'opening'
+              ? 'row-opening'
+              : r.line.fill_status === '待填'
+                ? 'row-todo'
+                : r.line.waiting
+                  ? 'row-waiting clickable-row'
+                  : 'clickable-row'
         }
         onRow={(r) => (r.type === 'line' && r.line.fill_status !== '待填' ? { onClick: () => onOpen(r.line) } : {})}
         summary={() =>
@@ -1052,6 +1114,8 @@ function LedgerTab({
           ) : null
         }
       />
+      {/* 对上了会通知日记账变了，列表跟着重读 */}
+      <PairEntryModal line={pairFor} onClose={() => setPairFor(null)} />
     </div>
   )
 }

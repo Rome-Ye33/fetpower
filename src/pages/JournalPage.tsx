@@ -1,4 +1,15 @@
-import { CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, ExclamationCircleFilled, LeftOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SettingOutlined } from '@ant-design/icons'
+import {
+  CheckCircleFilled,
+  ClockCircleOutlined,
+  CloseCircleFilled,
+  DownloadOutlined,
+  ExclamationCircleFilled,
+  LeftOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  RightOutlined,
+  SettingOutlined,
+} from '@ant-design/icons'
 import { Alert, Button, Card, Checkbox, Col, DatePicker, Input, Row, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -34,6 +45,8 @@ import {
   scopeOf,
 } from '../lib/journal'
 import type { AccountMonth, AcctStatus, FillHow, JournalLine, JournalScope, LedgerRow, Part } from '../lib/journal'
+import { ledgerSheet, saveBook, summarySheet } from '../lib/journalExport'
+import type { SummaryExportRow } from '../lib/journalExport'
 import { describeGroup, groupLogs, LOG_KINDS } from '../lib/journalLog'
 import type { JournalLog, LogGroup } from '../lib/journalLog'
 import { accountOptions, useRefData } from '../lib/refdata'
@@ -224,12 +237,23 @@ function MonthPicker({ month, onMonth }: { month: string; onMonth: (m: string) =
   )
 }
 
+/** 流水那一栏写的字（页面上的标签、导出 Excel 都用） */
+const statusLabel = (t: ReturnType<typeof useT>, status: AcctStatus, m: AccountMonth) =>
+  status === 'cash'
+    ? t('现金')
+    : status === 'ok'
+      ? t('已填完')
+      : status === 'todo'
+        ? t('待填 {n} 条', { n: m.unfilled_n })
+        : status === 'broken'
+          ? t('余额接不上')
+          : t('没有流水')
+
 /** 银行账户的流水填完了没有、余额接不接得上 */
 function StatusTag({ status, m }: { status: AcctStatus; m: AccountMonth }) {
   const t = useT()
   if (status === 'cash') return <span className="hint">{t('现金')}</span>
-  const label =
-    status === 'ok' ? t('已填完') : status === 'todo' ? t('待填 {n} 条', { n: m.unfilled_n }) : status === 'broken' ? t('余额接不上') : t('没有流水')
+  const label = statusLabel(t, status, m)
   // 以前导的流水没有余额列：只能看填没填完，对不了余额
   const hasBank = m.bank_balance !== null && m.bank_balance !== undefined
   const tip =
@@ -354,6 +378,43 @@ function SummaryTab({
   const span = (r: SumRow, n: number) => (r.type === 'group' ? { colSpan: n } : {})
   const hide = (r: SumRow) => (r.type === 'group' ? { colSpan: 0 } : {})
 
+  // 导出 Excel：和表里一样，每个账户一行、组末按币种合计
+  const exportExcel = () => {
+    const cur = (c: string) => t(CURRENCY_ZH[c] ?? c)
+    const out: SummaryExportRow[] = rows.flatMap((r): SummaryExportRow[] =>
+      r.type === 'acct'
+        ? [
+            {
+              group: t(accountGroup(r.a)),
+              currency: cur(r.a.currency),
+              account: r.a.short_name,
+              opening: Number(r.m.opening),
+              income: Number(r.m.income),
+              expense: Number(r.m.expense),
+              closing: Number(r.m.closing),
+              bankBalance: r.m.bank_balance != null ? Number(r.m.bank_balance) : null,
+              bankDate: r.m.bank_date ?? null,
+              status: statusLabel(t, r.status, r.m),
+            },
+          ]
+        : r.type === 'total'
+          ? [
+              {
+                group: t(r.label),
+                currency: cur(r.currency),
+                account: t('{group} {cur}合计', { group: t(r.label), cur: cur(r.currency) }),
+                opening: r.opening,
+                income: r.income,
+                expense: r.expense,
+                closing: r.closing,
+              },
+            ]
+          : [],
+    )
+    const book = scope === 'bank' ? t('银行日记账') : t('现金日记账')
+    saveBook(t('账户余额'), summarySheet(t, out, scope === 'bank', isLast), `${book}-${t('账户余额')}-${month}`)
+  }
+
   const bankColumns: ColumnsType<SumRow> =
     scope === 'bank'
       ? [
@@ -469,6 +530,9 @@ function SummaryTab({
         </Checkbox>
         <Button icon={<ReloadOutlined />} onClick={() => void load()}>
           {t('刷新')}
+        </Button>
+        <Button icon={<DownloadOutlined />} onClick={exportExcel} disabled={!rows.length}>
+          {t('导出 Excel')}
         </Button>
       </Space>
       <Row gutter={[12, 12]} className="balance-cards">
@@ -664,6 +728,30 @@ function LedgerTab({
       ? [jEdit && btn('out', t('填付款'), true), jEdit && btn('transfer', t('互转'))]
       : [rxEdit && rcEdit && btn('receipt', t('录成到账'), true), jEdit && btn('in', t('其他收入')), jEdit && btn('transfer', t('互转'))]
     return <span className="fill-buttons">{list.filter(Boolean)}</span>
+  }
+
+  // 导出 Excel（照《终端解款表》）：表里现在显示的这些（账户、日期、筛选都照页面），分了几种业务的每种一行
+  const [exporting, setExporting] = useState(false)
+  const exportExcel = async () => {
+    setExporting(true)
+    try {
+      // 只拆了一台车（或还没拆）的到账没有 parts：去取它的大架号
+      const ids = [...new Set(shown.filter((l) => l.receipt_id && !parseParts(l.parts).length).map((l) => Number(l.receipt_id)))]
+      const vins = new Map<number, string[]>()
+      for (let i = 0; i < ids.length; i += 150) {
+        const { data } = await supabase.from('v_receipt_claims').select('receipt_id, vin').in('receipt_id', ids.slice(i, i + 150)).order('id')
+        for (const c of data ?? []) if (c.receipt_id && c.vin) vins.set(c.receipt_id, [...(vins.get(c.receipt_id) ?? []), c.vin])
+      }
+      const from = range[0].format('YYYY-MM-DD')
+      const to = range[1].format('YYYY-MM-DD')
+      const withBal = showBalance && !!head
+      const balances = withBal ? new Map(ledger.flatMap((r): [string, number][] => (r.type === 'line' && r.balance !== null ? [[r.key, r.balance]] : []))) : null
+      const ws = ledgerSheet({ t, lines: shown, balances, opening: withBal ? { date: from, amount: Number(head.opening) } : null, closing: withBal ? closing : null, vins })
+      const book = scope === 'bank' ? t('银行日记账') : t('现金日记账')
+      saveBook(book, ws, `${book}-${acct?.short_name ?? t('全部账户')}-${from}-${to}${filtering ? '-' + t('已筛选') : ''}`)
+    } finally {
+      setExporting(false)
+    }
   }
 
   const columns: ColumnsType<LedgerRow> = [
@@ -872,6 +960,9 @@ function LedgerTab({
         )}
         <Button icon={<ReloadOutlined />} onClick={() => void load()}>
           {t('刷新')}
+        </Button>
+        <Button icon={<DownloadOutlined />} loading={exporting} disabled={!shown.length} onClick={() => void exportExcel()}>
+          {t('导出 Excel')}
         </Button>
       </Space>
       {acct && head && (

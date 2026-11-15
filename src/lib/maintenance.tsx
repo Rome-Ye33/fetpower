@@ -1,12 +1,13 @@
 // 维护模式（数据库 39）：管理员维护系统时，除管理员以外的人登录了也只看到“系统维护中”。
 // 真正挡人的是数据库：每个请求先过总闸（maintenance_gate），维护期间别人的请求一律回 423。
-// 这里只管：读状态；被挡的人换成维护提示页、每 30 秒看一眼、维护一结束整页刷新（顺便换上新版本）；
-// 管理员的开关和每页顶上的提示；登录页的提示。读不到状态（网络、数据库还没装 39）就当没在维护，照常用。
+// 这里只管：读状态；登录的非管理员页面开着时最多每 5 秒确认一次（别的请求刚成功过就不另外查，切到后台不查），
+// 维护一开始换成维护提示页，一结束整页刷新（顺便换上新版本）；管理员的开关和每页顶上的提示；登录页的提示。
+// 读不到状态（网络、数据库还没装 39）就当没在维护，照常用。
 import { Spin } from 'antd'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAuth } from './auth'
-import { MAINT_EVENT, supabase } from './supabase'
+import { lastApiOkAt, MAINT_EVENT, supabase } from './supabase'
 
 export type MaintStatus = {
   active: boolean
@@ -31,10 +32,13 @@ type MaintState = MaintStatus & {
 }
 
 const OFF: MaintStatus = { active: false, note: null, since: null, blocked: false, gate: null }
-/** 被挡在外面时多久看一眼维护结束了没有 */
-const BLOCKED_POLL_MS = 30_000
+/**
+ * 登录的非管理员（包括已经被挡在外面的）多久确认一次维护开没开、结束没结束（Rome 2026-11-15：5 秒内换成维护页）。
+ * 只是一行表按主键读一下；这段时间里别的请求成功过（也过了总闸）就不另外查；窗口在后台时不查
+ */
+const POLL_MS = 5_000
 /** 两次因为请求被拒（423）去读状态，至少隔这么久 */
-const HIT_GAP_MS = 3_000
+const HIT_GAP_MS = 1_000
 /** 管理员切回窗口时，离上次读不到这么久就不重读 */
 const ADMIN_FOCUS_GAP_MS = 60_000
 
@@ -71,6 +75,9 @@ function fromData(data: unknown): MaintStatus {
   }
 }
 
+const sameStatus = (a: MaintStatus, b: MaintStatus) =>
+  a.active === b.active && a.note === b.note && a.since === b.since && a.blocked === b.blocked && a.gate === b.gate
+
 const Ctx = createContext<MaintState | null>(null)
 
 export function MaintenanceProvider({ children }: { children: ReactNode }) {
@@ -86,6 +93,8 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
   const uidRef = useRef(uid)
   const blockedRef = useRef(false)
   const lastRead = useRef(0)
+  /** 上次读到的 gate：总闸真的装上了，别的请求成功才能当作“没被挡”的证明 */
+  const gateOn = useRef(false)
   const running = useRef<{ uid: string; job: Promise<MaintStatus | null> } | null>(null)
 
   const refresh = useCallback(async (): Promise<MaintStatus | null> => {
@@ -113,7 +122,9 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
         return next
       }
       blockedRef.current = next.blocked && !!forUid
-      setStatus(next)
+      gateOn.current = next.gate === true
+      // 没变就不换对象，免得每 5 秒让用到维护状态的地方都重画一遍
+      setStatus((cur) => (sameStatus(cur, next) ? cur : next))
       setReadFor(forUid)
       return next
     })()
@@ -135,7 +146,7 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
   }, [uid, authKnown, refresh])
 
   // 网站别的请求被总闸拒绝了（维护刚开始）：读状态，换成维护提示页。
-  // 一下子被拒好几个只读一次；离上次读不到 3 秒的，等到 3 秒再读（不能丢掉，否则要等下一个请求才发现）
+  // 一下子被拒好几个只读一次；离上次读不到 1 秒的，等到 1 秒再读（不能丢掉，否则要等下一次确认才发现）
   useEffect(() => {
     let timer = 0
     const onHit = () => {
@@ -153,20 +164,41 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh])
 
-  // 被挡在外面：每 30 秒、切回窗口时看一眼维护结束了没有（窗口在后台时不看）
   const blocked = status.blocked && readFor === (uid ?? '') && !!uid
+
+  // 登录的非管理员（包括已经被挡在外面的）：页面开着时最多每 5 秒确认一次。网站别的请求刚成功过（说明那一刻没被总闸挡）
+  // 就往后推，不另外查；窗口在后台时停下，切回来马上确认一次。维护开始 → 换成维护提示页；结束 → 整页刷新回来
+  const watch = !!uid && !loading && !isAdmin
   useEffect(() => {
-    if (!blocked) return
-    const tick = () => {
-      if (!document.hidden) void refresh()
+    if (!watch) return
+    let timer = 0
+    let stopped = false
+    function arm(ms: number) {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(tick, ms)
     }
-    const timer = window.setInterval(tick, BLOCKED_POLL_MS)
-    document.addEventListener('visibilitychange', tick)
+    function tick() {
+      if (stopped || document.hidden) return
+      const since = Date.now() - Math.max(gateOn.current ? lastApiOkAt() : 0, lastRead.current)
+      if (since < POLL_MS) {
+        arm(POLL_MS - since)
+        return
+      }
+      void refresh().finally(() => {
+        if (!stopped) arm(POLL_MS)
+      })
+    }
+    const onShow = () => {
+      if (!document.hidden) tick()
+    }
+    document.addEventListener('visibilitychange', onShow)
+    arm(POLL_MS)
     return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', tick)
+      stopped = true
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onShow)
     }
-  }, [blocked, refresh])
+  }, [watch, refresh])
 
   // 管理员：切回窗口时重读（在另一台设备上开始 / 结束了维护，这边顶上的提示跟着变）
   useEffect(() => {

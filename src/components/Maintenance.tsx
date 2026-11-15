@@ -93,7 +93,7 @@ function EndButton({ type = 'primary', size }: { type?: 'primary' | 'default'; s
     setBusy(true)
     try {
       await m.set(false)
-      message.success(t('已结束维护，大家的页面会在一分钟内自动恢复'))
+      message.success(t('已结束维护，大家的页面几秒内自动恢复'))
     } catch (e) {
       message.error(errorText(e))
     } finally {
@@ -103,7 +103,7 @@ function EndButton({ type = 'primary', size }: { type?: 'primary' | 'default'; s
   return (
     <Popconfirm
       title={t('结束维护？')}
-      description={t('大家的页面会在一分钟内自动恢复，攒下的待办提醒邮件随后发出。')}
+      description={t('大家的页面几秒内自动恢复，攒下的待办提醒邮件随后发出。')}
       okText={t('结束维护')}
       cancelText={t('取消')}
       onConfirm={end}
@@ -227,7 +227,7 @@ export function MaintenanceCard() {
           <>
             <div style={{ marginBottom: 6 }}>{t('开始以后：')}</div>
             <ul className="maint-list">
-              <li>{t('除管理员以外的人都登录不了；已经登录的人最多一分钟内页面换成“系统维护中”，看不到也改不了任何东西')}</li>
+              <li>{t('除管理员以外的人都登录不了；已经登录的人 5 秒内页面换成“系统维护中”，看不到也改不了任何东西')}</li>
               <li>{t('你照常使用，每个页面顶上都会提示“维护中”，维护完记得点“结束维护”')}</li>
               <li>{t('待办提醒邮件先不发，结束后马上补发')}</li>
             </ul>

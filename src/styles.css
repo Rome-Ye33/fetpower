@@ -1245,3 +1245,105 @@ html[lang='en'] .logo-name {
   white-space: normal;
   word-break: break-word;
 }
+
+/* ---------- 维护模式（39）：被挡在外面的人看到的整页提示，和窄屏登录页一样上面一条深蓝 ---------- */
+.maint-wrap {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 0 16px 32px;
+  background: linear-gradient(180deg, #0f1d40 0, #17337d 220px, #f3f5f9 220px);
+}
+.maint-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 20px 0 28px;
+}
+.maint-card {
+  box-sizing: border-box;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 32px 28px 22px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  text-align: center;
+}
+.maint-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: #fff4e5;
+  color: #d46b08;
+  font-size: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.maint-title {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 600;
+}
+.maint-sub.ant-typography {
+  margin-bottom: 16px;
+}
+.maint-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  text-align: left;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 8px;
+}
+.maint-note-label {
+  margin-bottom: 2px;
+  color: #ad6800;
+  font-size: 12px;
+}
+.maint-note-text,
+.maint-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.maint-since {
+  margin-bottom: 18px;
+}
+.maint-actions {
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.maint-who {
+  word-break: break-all;
+}
+/* 登录页、管理员每页顶上、用户与权限里的开关 */
+.maint-login-alert {
+  margin-bottom: 12px;
+}
+.maint-banner {
+  margin-bottom: 12px;
+  border-radius: 10px;
+}
+.maint-card-admin.is-on {
+  border-color: #ffd591;
+  background: #fffaf0;
+}
+.maint-card-note {
+  margin-top: 6px;
+}
+.maint-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+.maint-list li {
+  margin-bottom: 4px;
+}
+/* 说明框下面的字数和弹窗底下的按钮隔开一点 */
+.maint-note-input {
+  margin-bottom: 18px;
+}

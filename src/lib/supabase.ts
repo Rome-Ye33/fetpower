@@ -4,7 +4,17 @@ import type { Database } from './database.types'
 const url = import.meta.env.VITE_SUPABASE_URL || 'https://lltqxosyzzbpellfljpv.supabase.co'
 const key = import.meta.env.VITE_SUPABASE_KEY || 'sb_publishable_kGF93JQzkOgPsUXA6jqoHQ_dIpw_YVl'
 
-export const supabase = createClient<Database>(url, key)
+/** 维护模式（39）：数据库的总闸拒绝了一个请求（HTTP 423）时发出这个事件，maintenance.tsx 马上去读状态、换成维护提示页 */
+export const MAINT_EVENT = 'maintenance-hit'
+
+// 每个请求原样发出去，只看一眼回来的状态码，不读内容
+const watchFetch: typeof fetch = async (input, init) => {
+  const res = await fetch(input, init)
+  if (res.status === 423 && typeof window !== 'undefined') window.dispatchEvent(new Event(MAINT_EVENT))
+  return res
+}
+
+export const supabase = createClient<Database>(url, key, { global: { fetch: watchFetch } })
 
 type PublicSchema = Database['public']
 export type TableRow<T extends keyof PublicSchema['Tables']> = PublicSchema['Tables'][T]['Row']

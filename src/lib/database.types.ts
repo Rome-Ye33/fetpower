@@ -58,6 +58,7 @@ export type Database = {
           actor: string | null
           actor_name: string | null
           at: string
+          changes: Json | null
           doc_id: number
           doc_type: string
           from_status: string | null
@@ -71,6 +72,7 @@ export type Database = {
           actor?: string | null
           actor_name?: string | null
           at?: string
+          changes?: Json | null
           doc_id: number
           doc_type: string
           from_status?: string | null
@@ -84,6 +86,7 @@ export type Database = {
           actor?: string | null
           actor_name?: string | null
           at?: string
+          changes?: Json | null
           doc_id?: number
           doc_type?: string
           from_status?: string | null

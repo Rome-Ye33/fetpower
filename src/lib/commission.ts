@@ -317,6 +317,7 @@ export const TRAIL_PRINT: Record<string, { zh: string; en: string }> = {
   reject: { zh: '退回', en: 'RETURNED' },
   pay: { zh: '发放', en: 'PAID OUT' },
   unpay: { zh: '取消发放', en: 'PAYOUT CANCELLED' },
+  edit: { zh: '修改', en: 'EDITED' },
 }
 
 /** 把提成单打开成可以打印的页面（新窗口） */

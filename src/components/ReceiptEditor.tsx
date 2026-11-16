@@ -1,4 +1,4 @@
-import { DeleteOutlined, LinkOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, LinkOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons'
 import {
   Alert,
   App,
@@ -116,6 +116,8 @@ type ClaimDraft = {
   sub?: SubmissionClaim
   /** 这一行是智能填表填的 */
   ai?: boolean
+  /** 存好的行打开时的样子（42：已生效的到账，财务只能补充——选了车的行不能动，没选车的只能选同一个客户的车） */
+  orig?: { vehicle_id: number | null; customer_id: number | null; nature: string | null }
 }
 
 type FormValues = {
@@ -183,6 +185,8 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   const rateTouched = useRef(false)
   /** 业务员确认时填的汇率（财务录的时候汇率空着，38） */
   const [spRate, setSpRate] = useState<number | null>(null)
+  /** 管理员点了「修改」：改已生效的到账（42） */
+  const [adminEditing, setAdminEditing] = useState(false)
 
   const accountId = Form.useWatch('account_id', form)
   const amount = num(Form.useWatch('amount_orig', form))
@@ -190,7 +194,6 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   const account = accountId ? accountById.get(accountId) : undefined
   const currency = account?.currency ?? ''
   const isUsd = currency === 'USD'
-  const readOnly = !rxEdit
   const bankLocked = !!bankLine
   /** 银行流水里有这一项（非空）就不让改；银行没给的可以补 */
   const bankGave = (k: 'payer_summary' | 'bank_ref' | 'cheque_no') => !!bankLine?.[k]?.trim()
@@ -208,6 +211,22 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   const rFlowItems = useMemo(() => parseFlow(receipt?.flow), [receipt?.flow])
   /** 这笔到账走审批（录入时有审批级别）；没走的录入就生效 */
   const inFlow = !!currentId && rFlowItems.length > 0
+  /**
+   * 已生效的到账只有管理员能改（42，Rome 2026-11-16）：管理员点「修改」才改，不用重审，改了什么记在审批记录里。
+   * 能改到账录入的财务只能补充（Rome 选的「能补，别的只限管理员」）：没定大架号的钱选上同一个客户的车、
+   * 还没拆的钱拆到车上、加凭证、请业务员填写再采用；已经拆好的行和到账本身改不了。数据库也这样拦
+   */
+  const approvedNow = !!currentId && rStatus === 'approved'
+  const adminEdit = approvedNow && isAdmin && adminEditing
+  const supplement = approvedNow && rxEdit && !isAdmin
+  /** 到账本身（表头）改不了 */
+  const readOnly = !rxEdit || (approvedNow && !adminEdit)
+  /** 拆分整张只能看（补充时有几行能改，见 rowLocked / rowFixed） */
+  const claimsReadOnly = readOnly && !supplement
+  /** 补充时：存好的、已经选了车的行一点都不能动 */
+  const rowLocked = (r: ClaimDraft) => supplement && !!r.orig?.vehicle_id
+  /** 补充时：存好的行（选了车的、没选车的）都不能换客户、换款项性质，不能删 */
+  const rowFixed = (r: ClaimDraft) => supplement && !!r.orig
   /** 现在这一级是“业务员本人确认”（25）：不看岗位，由拆分里的业务员本人确认，管理员可以代办 */
   const stepIsSp = !!rStep && rFlowItems.some((f) => f.step === rStep && f.sp)
   /** 拆分里的业务员（车的业务员，没锁车的看拆分上填的） */
@@ -305,6 +324,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
         report_note: x.report_note ?? '',
         model_desc: x.vehicle_id ? '' : (x.model_desc ?? ''),
         salesperson_id: x.vehicle_id ? null : x.salesperson_id,
+        orig: { vehicle_id: x.vehicle_id ?? null, customer_id: x.customer_id ?? null, nature: x.nature ?? null },
       }))
       setClaims(rows)
       const vids = rows.map((x) => x.vehicle_id).filter((x): x is number => x != null)
@@ -332,6 +352,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     setRequesting(false)
     setOthers([])
     setLineEntry(null)
+    setAdminEditing(false)
     if (receiptId) {
       void load(receiptId)
       return
@@ -465,6 +486,14 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   }
 
   const pickVehicle = (key: string, id: number | null, v: Vehicle | null) => {
+    const row = claims.find((r) => r.key === key)
+    // 已生效的到账（42）：没定大架号的钱只能补到同一个客户的车上
+    if (supplement && v && row?.orig && !row.orig.vehicle_id && row.orig.customer_id != null && v.customer_id !== row.orig.customer_id) {
+      message.error(t('这笔到账已经生效：没定大架号的钱只能补到同一个客户的车上；要改请找管理员'))
+      return
+    }
+    // 补充时新加的行：款项性质先照这个客户没定车的那笔（数据库要求性质不变）
+    const unlockedNature = supplement && v ? (claims.find((c) => c.orig && !c.orig.vehicle_id && c.orig.customer_id === v.customer_id)?.orig?.nature ?? undefined) : undefined
     if (v) rememberVehicles([v])
     setDirty(true)
     setClaims((rows) => {
@@ -472,7 +501,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
       return rows.map((r) => {
         if (r.key !== key) return r
         const next: ClaimDraft = { ...r, vehicle_id: id, customer_id: v?.customer_id ?? r.customer_id }
-        if (v && !r.nature) next.nature = defaultNature(v)
+        if (v && !r.nature) next.nature = unlockedNature ?? defaultNature(v)
         if (v && !r.amount_orig && amount > others) next.amount_orig = round2(amount - others)
         return next
       })
@@ -640,6 +669,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
       notifyChequesChanged()
     }
     if (review) setReview(null)
+    setAdminEditing(false)
     if (aiIndex !== null) {
       aiSession.markSaved(aiIndex)
       setAiIndex(null)
@@ -660,6 +690,8 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     else if (pending && nowSp(now)) message.success(!currentId ? t('已保存，等业务员确认，全部批完才算到账') : wasApproved ? t('已保存，这笔到账回到审批中，等业务员确认') : t('已保存，等业务员确认'))
     else if (!currentId) message.success(pending ? t('已保存，等{name}审批，批完才算到账', { name }) : t('已保存'))
     else if (pending) message.success(wasApproved ? t('已保存，这笔到账回到审批中，等{name}审批', { name }) : t('已保存，等{name}审批', { name }))
+    // 已生效的改了（42）：不用重审，记在审批记录里
+    else if (wasApproved) message.success(t('已保存，改了什么记在审批记录里'))
     else message.success(t('已保存'))
     if (extra.length) message.info(t('流水里的{mods}也记进了银行日记账', { mods: [...new Set(extra.map((o) => t(o.module ?? '')))].join(listSep()) }))
     return true
@@ -866,6 +898,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
             model_desc: c.vehicle_id ? '' : (c.model ?? ''),
             salesperson_id: c.vehicle_id ? null : fillReq.salesperson_id,
             sub: c.vehicle_id ? undefined : c,
+            orig: m?.orig,
           }
         })
       : [{ key: newKey() }]
@@ -939,8 +972,25 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     })
   }
 
+  /** 管理员不改了：有改动就问一句，再按存好的重新读 */
+  const cancelAdminEdit = () => {
+    if (!dirty) {
+      setAdminEditing(false)
+      return
+    }
+    modal.confirm({
+      title: t('改动还没保存，确定不改了？'),
+      okText: t('不改了'),
+      cancelText: t('继续改'),
+      onOk: async () => {
+        setAdminEditing(false)
+        if (currentId) await load(currentId)
+      },
+    })
+  }
+
   const close = () => {
-    if (dirty && !readOnly) {
+    if (dirty && (!readOnly || supplement)) {
       modal.confirm({
         title: t('有改动还没保存，确定关闭？'),
         okText: t('不保存，关闭'),
@@ -962,7 +1012,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
           options={natureOptions}
           style={{ width: '100%' }}
           placeholder={t('选择')}
-          disabled={readOnly}
+          disabled={claimsReadOnly || rowFixed(r)}
           onChange={(x: string) => setRow(r.key, { nature: x })}
         />
       ),
@@ -978,10 +1028,10 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                 value={r.vehicle_id}
                 known={[...vehicles.values()]}
                 style={{ width: '100%' }}
-                disabled={readOnly}
+                disabled={claimsReadOnly || rowLocked(r)}
                 onChange={(id, veh) => pickVehicle(r.key, id, veh)}
               />
-              {!readOnly && vxEdit && (
+              {!claimsReadOnly && !rowLocked(r) && vxEdit && (
                 <Tooltip title={t('系统里还没有这台车？新增一台')}>
                   <Button icon={<PlusOutlined />} onClick={() => setNewVehicleFor(r.key)} />
                 </Tooltip>
@@ -1023,18 +1073,19 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                   onChange={(id) => pickCustomer(r.key, id)}
                   placeholder={t('选客户')}
                   style={{ width: '100%', marginTop: 4 }}
+                  disabled={claimsReadOnly || rowFixed(r)}
                 />
                 {r.customer_id && (
                   <Space.Compact style={{ width: '100%', marginTop: 4 }}>
                     <Input
                       value={r.model_desc}
-                      disabled={readOnly}
+                      disabled={claimsReadOnly || rowLocked(r)}
                       placeholder={t('数量与设备型号，如 1台重汽6X4自卸车')}
                       onChange={(e) => setRow(r.key, { model_desc: e.target.value })}
                     />
                     <Select
                       allowClear
-                      disabled={readOnly}
+                      disabled={claimsReadOnly || rowLocked(r)}
                       style={{ width: 150 }}
                       placeholder={t('业务员')}
                       showSearch={{ optionFilterProp: 'label' }}
@@ -1054,6 +1105,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                   onChange={(id) => setRow(r.key, { customer_id: id })}
                   placeholder={t('不选车时选客户')}
                   style={{ width: '100%', marginTop: 4 }}
+                  disabled={claimsReadOnly || rowFixed(r)}
                 />
               )
             )}
@@ -1070,7 +1122,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
           min={0}
           precision={2}
           style={{ width: '100%' }}
-          disabled={readOnly}
+          disabled={claimsReadOnly || rowLocked(r)}
           onChange={(x) => setRow(r.key, { amount_orig: x == null ? null : Number(x) })}
         />
       ),
@@ -1088,28 +1140,29 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
         <Input
           value={r.report_note}
           placeholder={t('如：老板给予$500折扣')}
-          disabled={readOnly}
+          disabled={claimsReadOnly || rowLocked(r)}
           onChange={(e) => setRow(r.key, { report_note: e.target.value })}
         />
       ),
     },
-    ...(readOnly
+    ...(claimsReadOnly
       ? []
       : [
           {
             title: '',
             width: 44,
-            render: (_: unknown, r: ClaimDraft) => (
-              <Button
-                type="text"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => {
-                  setDirty(true)
-                  setClaims((rows) => rows.filter((x) => x.key !== r.key))
-                }}
-              />
-            ),
+            render: (_: unknown, r: ClaimDraft) =>
+              rowFixed(r) ? null : (
+                <Button
+                  type="text"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => {
+                    setDirty(true)
+                    setClaims((rows) => rows.filter((x) => x.key !== r.key))
+                  }}
+                />
+              ),
           },
         ]),
   ]
@@ -1212,9 +1265,17 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
               {t('重新提交')}
             </Button>
           )}
-          {!readOnly && (
+          {approvedNow && isAdmin && !adminEditing && (
+            <Tooltip title={t('已生效的到账只有管理员能改；改了不用重新审批，记在审批记录里')}>
+              <Button icon={<EditOutlined />} onClick={() => setAdminEditing(true)}>
+                {t('修改')}
+              </Button>
+            </Tooltip>
+          )}
+          {adminEdit && <Button onClick={cancelAdminEdit}>{t('取消修改')}</Button>}
+          {(!readOnly || (supplement && dirty)) && (
             <Button type={canApprove || canResubmit ? 'default' : 'primary'} loading={saving} onClick={() => void save()}>
-              {review ? t('通过，生成到账') : t('保存')}
+              {review ? t('通过，生成到账') : adminEdit ? t('保存修改') : t('保存')}
             </Button>
           )}
         </Space>
@@ -1364,6 +1425,24 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
             }
           />
         )}
+        {approvedNow && receipt && isStaff && (
+          <Alert
+            type={adminEdit ? 'warning' : 'info'}
+            showIcon
+            style={{ marginBottom: 12 }}
+            className="approved-lock"
+            title={adminEdit ? t('正在修改已生效的到账') : t('已生效：只有管理员能改')}
+            description={
+              adminEdit
+                ? t('改好点“保存修改”：不用重新审批，改了什么会记在审批记录里。和银行流水配对的，账户、日期、金额照旧不能改。')
+                : isAdmin
+                  ? t('要改点右上角“修改”：不用重新审批，改了什么会记在审批记录里。')
+                  : rxEdit
+                    ? t('你还可以补充：没定大架号的钱选上同一个客户的车、还没拆的钱拆到车上、加凭证。已经拆好的和到账本身要改请找管理员。')
+                    : undefined
+            }
+          />
+        )}
         {inFlow && (
           <Card size="small" style={{ marginBottom: 12 }}>
             <Steps
@@ -1376,11 +1455,6 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                 { title: t('生效'), content: rStatus === 'approved' && receipt?.approved_at ? dateTime(receipt.approved_at) : '' },
               ]}
             />
-            {rStatus === 'approved' && rxEdit && !isAdmin && (
-              <div className="hint" style={{ marginTop: 8 }}>
-                {t('已生效。改了日期、账户、金额或汇率会回到审批中，重新批完才再算到账。')}
-              </div>
-            )}
           </Card>
         )}
         {isStaff && currentId && fillReq && fillReq.status === 'requested' && (
@@ -1425,7 +1499,15 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                       <Button type="primary" size="small" loading={acting === 'accept'} onClick={() => void acceptFill()}>
                         {t('采用并通过')}
                       </Button>
-                      <Button size="small" disabled={fillApplied} onClick={() => void applyFill()}>
+                      <Button
+                        size="small"
+                        disabled={fillApplied}
+                        onClick={() => {
+                          // 管理员看已生效的到账时先放进拆分：顺便进入修改，好改好再存
+                          if (approvedNow && isAdmin) setAdminEditing(true)
+                          void applyFill()
+                        }}
+                      >
                         {fillApplied ? t('已放进拆分') : t('先放进拆分')}
                       </Button>
                       <Button
@@ -1594,7 +1676,9 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
             <div style={{ marginTop: 6 }}>
               <Vouchers
                 value={attachments}
-                readOnly={readOnly}
+                readOnly={readOnly && !supplement}
+                canRemove={!readOnly}
+                paste={!readOnly}
                 onChange={(p) => {
                   setAttachments(p)
                   setDirty(true)
@@ -1683,7 +1767,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
             scroll={{ x: 860 }}
             locale={{ emptyText: t('还没有拆分。钱还不知道是哪台车的，也可以先只存到账。') }}
           />
-          {!readOnly && (
+          {!claimsReadOnly && (
             <Space style={{ marginTop: 8 }} wrap>
               <Button icon={<PlusOutlined />} onClick={addRow}>
                 {t('再加一行')}
@@ -1707,14 +1791,17 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                 </Tooltip>
               )}
               <span className="hint">
-                {t('一笔钱付多台车时，每台车一行；金额按业务员通知的原币填写。还不知道是哪台车的，不选车、选客户。')}
+                {supplement
+                  ? t('已经拆好的行改不了。没定大架号的那行可以选上这个客户的车（金额可以分几台车，性质不变）；还没拆的钱可以再加一行。')
+                  : t('一笔钱付多台车时，每台车一行；金额按业务员通知的原币填写。还不知道是哪台车的，不选车、选客户。')}
               </span>
             </Space>
           )}
         </Card>
 
         {review && <ApprovalTrail docType="submission" docId={review.id} version={review.updated_at} />}
-        {inFlow && <ApprovalTrail docType="receipt" docId={currentId} version={receipt?.updated_at} />}
+        {/* 录入就生效的到账没有审批记录，管理员改过以后有“已修改”（42） */}
+        {currentId && <ApprovalTrail docType="receipt" docId={currentId} version={receipt?.updated_at} currency={currency || undefined} />}
         {isStaff && fillReq && <ApprovalTrail docType="submission" docId={fillReq.id} version={fillReq.updated_at} />}
       </Spin>
 

@@ -66,6 +66,7 @@ export const ACTION_LABEL: Record<string, string> = {
   reopen: '到账被删除，回到待审核',
   request: '已请业务员填写',
   cancel: '取消了请业务员填写',
+  edit: '已修改',
 }
 export const ACTION_COLOR: Record<string, string> = {
   submit: 'blue',
@@ -78,6 +79,7 @@ export const ACTION_COLOR: Record<string, string> = {
   reopen: 'gray',
   request: 'orange',
   cancel: 'gray',
+  edit: 'purple',
 }
 
 export function docType(x: string | null | undefined): DocType {

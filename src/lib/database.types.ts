@@ -532,6 +532,7 @@ export type Database = {
           actor: string | null
           actor_name: string | null
           at: string
+          changes: Json | null
           cheque_id: number
           from_status: string | null
           id: number
@@ -543,6 +544,7 @@ export type Database = {
           actor?: string | null
           actor_name?: string | null
           at?: string
+          changes?: Json | null
           cheque_id: number
           from_status?: string | null
           id?: never
@@ -554,6 +556,7 @@ export type Database = {
           actor?: string | null
           actor_name?: string | null
           at?: string
+          changes?: Json | null
           cheque_id?: number
           from_status?: string | null
           id?: never

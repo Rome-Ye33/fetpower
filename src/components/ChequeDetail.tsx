@@ -12,6 +12,7 @@ import { useT } from '../lib/i18n'
 import { accountOptions, useRefData } from '../lib/refdata'
 import { supabase } from '../lib/supabase'
 import type { Receipt } from '../lib/supabase'
+import EditChanges from './EditChanges'
 
 // 一张支票：信息、状态操作（定计划、存票、退票、取消、恢复、生成到账、对上到账、取消关联、删除）、记录
 // 「记一条沟通」「请业务确认」两个按钮 Rome 2026-11-13 去掉了：导表格带进来的沟通记录、等业务确认状态照旧，只是不再手工记新的。
@@ -343,6 +344,8 @@ export default function ChequeDetail({ open, cheque, onClose, onChanged, onEdit,
                           </span>
                         </div>
                         {l.note && <div className={l.action === 'bounce' || l.action === 'cancel' ? 'text-danger' : undefined}>{l.note}</div>}
+                        {/* 改了什么（43）：哪几项、改前 → 改后 */}
+                        {l.action === 'edit' && <EditChanges changes={l.changes} currency={c?.currency ?? undefined} />}
                       </div>
                     ),
                   }))}

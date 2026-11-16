@@ -2,6 +2,9 @@
 // 到账：账户（简称）、日期、金额、汇率、支票号、付款方、参考号、内部备注、凭证（个数）、拆分（整张：大架号或客户、性质、原币金额、备注）。
 // 提成单：表头各项、车辆（大架号、车型、单价、本车提成、备注）、付款（拆分编号、到账编号、大架号、日期、本单美元、备注）。
 // 拆分、车辆、付款是整张清单：显示时比一比，只列去掉的和加上的。
+// 支票（43，cheque_logs.changes）：支票号、银行、名称、客户、车（大架号用「、」连）、业务员、用途、币种、金额、分期款/月、到期日期、
+// 合同序号、第几期、共几期、备注（remarks）、状态、计划存票日期、原因。
+import { CHEQUE_STATUS_LABEL, chequeStatus } from './cheques'
 import type { Json } from './database.types'
 import { money } from './format'
 
@@ -86,6 +89,35 @@ export function changeLabel(k: string, t: Tr): string {
       return t('转赛地汇率')
     case 'remarks':
       return t('备注')
+    // 支票（43）
+    case 'drawer_bank':
+      return t('支票银行')
+    case 'drawer_name':
+      return t('支票名称')
+    case 'cars':
+      return t('哪几台车的')
+    case 'purpose':
+      return t('用途')
+    case 'currency':
+      return t('币种')
+    case 'amount':
+      return t('支票金额')
+    case 'installment_usd':
+      return t('分期款/月')
+    case 'due_date':
+      return t('到期日期')
+    case 'contract_no':
+      return t('合同序号')
+    case 'installment_no':
+      return t('第几期')
+    case 'installment_count':
+      return t('共几期')
+    case 'status':
+      return t('状态')
+    case 'plan_date':
+      return t('计划存票日期')
+    case 'reason':
+      return t('原因')
     default:
       return k
   }
@@ -93,12 +125,25 @@ export function changeLabel(k: string, t: Tr): string {
 
 const str = (v: Json | undefined): string => (v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v))
 
-/** 一项的值（不是清单的）。cur：到账的币种，金额前面带上 */
+/** 一项的值（不是清单的）。cur：到账、支票的币种，金额前面带上 */
 export function changeValue(k: string, v: Json, t: Tr, cur?: string): string {
-  if (v === null || v === undefined || v === '') return t('（空）')
+  if (v === null || v === undefined || v === '') {
+    // 支票上空着的几项，和支票详情里的说法一样
+    if (k === 'amount') return t('空白支票')
+    if (k === 'due_date') return t('没写日期')
+    if (k === 'cars') return t('没选车')
+    return t('（空）')
+  }
   switch (k) {
     case 'amount_orig':
+    case 'amount':
       return cur ? `${cur} ${money(v)}` : money(v)
+    case 'installment_usd':
+      return '$ ' + money(v)
+    case 'purpose':
+      return t(str(v))
+    case 'status':
+      return t(CHEQUE_STATUS_LABEL[chequeStatus(str(v))])
     case 'other_charges_usd':
     case 'discount_usd':
     case 'down_payment_usd':

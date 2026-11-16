@@ -499,6 +499,38 @@ html[lang='en'] .logo-name {
   }
 }
 
+/* 审批记录里“已修改”的那一行（42）：改了哪几项，改前 → 改后 */
+.edit-changes {
+  margin-top: 2px;
+  font-size: 13px;
+}
+.edit-change + .edit-change {
+  margin-top: 2px;
+}
+.edit-label {
+  color: #595959;
+}
+.edit-before {
+  color: #8a8f98;
+  text-decoration: line-through;
+}
+.edit-after {
+  color: #0f172a;
+  font-weight: 500;
+}
+.edit-arrow {
+  color: #8a8f98;
+}
+.edit-removed {
+  color: #8a8f98;
+  padding-left: 12px;
+  text-decoration: line-through;
+}
+.edit-added {
+  color: #237804;
+  padding-left: 12px;
+}
+
 /* 到账拆分：大架号未锁定，先记到客户名下 */
 .unlocked-box {
   margin-top: 4px;

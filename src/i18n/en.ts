@@ -157,6 +157,14 @@ const VALUES: Record<string, string> = {
   "找不到这张提成单，或没有权限修改": "Commission voucher not found, or you are not allowed to change it",
   "提成单已经提交，不能再改；要改请先撤回，或请审核人退回":
     "This voucher has been submitted and can't be changed. Withdraw it first, or ask the reviewer to return it.",
+  // 审批通过以后只有管理员能改（SQL 42）
+  "提成单已经批准，只有管理员能改；要改请找管理员": "This voucher has been approved; only an admin can change it. Please ask an admin.",
+  "这笔到账已经生效，只有管理员能改；要改请找管理员": "This receipt is in effect; only an admin can change it. Please ask an admin.",
+  "这笔到账已经生效，凭证只能加、不能删；要删请找管理员": "This receipt is in effect: proof can be added but not removed. Please ask an admin to remove it.",
+  "这笔到账已经生效，已经拆到车上的那几行只有管理员能改；要改请找管理员":
+    "This receipt is in effect: lines already allocated to vehicles can only be changed by an admin. Please ask an admin.",
+  "这笔到账已经生效：没定大架号的钱只能补到同一个客户的车上（款项性质不变），不能挪给别的客户；要改请找管理员":
+    "This receipt is in effect: money with no VIN yet can only go to the same customer's vehicles (same payment type), not to another customer. Please ask an admin.",
   "每台车都要从系统里选（大架号必填）": "Pick every vehicle from the system (VIN required)",
   "同一台车填了两次": "The same vehicle is listed twice",
   "这些车不是这个客户或这个业务员名下的：{list}": "These vehicles don't belong to this customer and salesperson: {list}",
@@ -1604,7 +1612,6 @@ const UI: Record<string, string> = {
     "It counts as received only once approval is complete (then it goes into balances and reports and can be reported). Changing the date, account, amount or rate restarts approval from the first level.",
   "录入": "Entered",
   "生效": "In effect",
-  "已生效。改了日期、账户、金额或汇率会回到审批中，重新批完才再算到账。": "In effect. Changing the date, account, amount or rate sends it back into approval; it counts as received again once re-approved.",
   "审批通过（生效）后才能报款。": "It can be reported once approval is complete (in effect).",
   // 到账互审（SQL 25）
   "待{name}确认": "Awaiting {name}'s confirmation",
@@ -2199,6 +2206,41 @@ const UI: Record<string, string> = {
   "还有 {n} 笔记了、银行流水里还没有的（标「等流水」），不算进余额。流水导进来自动对上：参考号 / 支票号对得上的，或者同金额、日期相差 3 天内只有一笔的；分不清的在待填的流水上点「对上已记的」选。": "{n} recorded items are not in the bank statement yet (marked “Awaiting statement”) and are not counted in the balance. They are matched automatically when the statement is imported: by reference / cheque number, or by the same amount within 3 days when there is only one candidate; ambiguous ones are picked with “Match recorded entry” on the line to fill in.",
   "先导银行流水，再一条一条填。导进来的流水自动对上已经录了的（到账、银行日记账里先记的收付）：先按支票号 / 参考号，再按同账户、同金额、日期相差 3 天内，只对上分得清的（一条流水只有一笔对得上）；分不清的（比如同一天几笔一样的金额）留着，由人点「对上已记的」或「关联已录的」选。配不上的收款在「银行有、没人报」里录成到账；付出去的在「付款待填」里填业务模块和摘要。填好的流水就是银行日记账。": "Import the bank statement first, then fill in each line. Imported lines are matched automatically to what has already been recorded (receipts, and entries recorded first in the bank journal): first by cheque / reference number, then by same account, same amount and within 3 days, and only where it is unambiguous (one line, one candidate). Ambiguous cases (e.g. several identical amounts on the same day) are left for a person to pick with “Match recorded entry” or “Link to existing”. Money in that matches nothing is recorded under “In the bank, not reported”; money out is filled in with a category and narration under “Payments to fill in”. The filled-in statement is the bank journal.",
   "银行流水里付出去、还没填的。点「填付款」选业务模块、写摘要（日期、账户、金额照银行的）；在银行日记账里先记了的点「对上已记的」；转到自己别的账户的点「互转」；手续费这类小额的勾上几条「一起填」；银行冲正之类不算收付的点「忽略」。": "Money paid out in the bank statement that has not been filled in yet. Click “Fill in payment” to choose a category and write a narration (date, account and amount come from the bank); if it was already recorded in the bank journal, use “Match recorded entry”; use “Transfer” for money sent to another of our accounts; tick several small items such as bank charges and use “Fill in together”; use “Ignore” for bank reversals that are not real payments.",
+  // 审批通过以后只有管理员能改（42）
+  "取消修改": "Cancel edit",
+  "改动还没保存，确定不改了？": "Your changes are not saved. Stop editing anyway?",
+  "不改了": "Discard changes",
+  "继续改": "Keep editing",
+  "已保存修改，状态不变，改了什么记在审批记录里": "Changes saved. The status stays the same; what changed is recorded in the approval history.",
+  "批准以后只有管理员能改；改了状态不变、不用重新审批，记在审批记录里":
+    "Once approved, only an admin can change it. The status stays the same, no re-approval is needed, and the change is recorded in the approval history.",
+  "正在修改已发放的提成单": "Editing a paid-out commission voucher",
+  "正在修改已批准的提成单": "Editing an approved commission voucher",
+  "改好点“保存修改”：还是已发放、不用重新审批，改了什么会记在审批记录里。钱已经发了，改了金额要自己和业务员多退少补。":
+    "Click “Save changes” when done: it stays paid out, no re-approval is needed, and what changed is recorded in the approval history. The money has already been paid, so settle any difference with the salesperson yourself.",
+  "改好点“保存修改”：还是已批准待发放、不用重新审批，改了什么会记在审批记录里。":
+    "Click “Save changes” when done: it stays approved and awaiting payout, no re-approval is needed, and what changed is recorded in the approval history.",
+  "顺序变了": "Order changed",
+  "这笔到账已经生效：没定大架号的钱只能补到同一个客户的车上；要改请找管理员":
+    "This receipt is in effect: money with no VIN yet can only go to the same customer's vehicles. Please ask an admin for anything else.",
+  "已保存，改了什么记在审批记录里": "Saved. What changed is recorded in the approval history.",
+  "已生效的到账只有管理员能改；改了不用重新审批，记在审批记录里":
+    "Only an admin can change a receipt that is in effect. No re-approval is needed, and the change is recorded in the approval history.",
+  "正在修改已生效的到账": "Editing a receipt that is in effect",
+  "已生效：只有管理员能改": "In effect: only an admin can change it",
+  "改好点“保存修改”：不用重新审批，改了什么会记在审批记录里。和银行流水配对的，账户、日期、金额照旧不能改。":
+    "Click “Save changes” when done: no re-approval is needed, and what changed is recorded in the approval history. If it is matched to a bank line, the account, date and amount still can't be changed.",
+  "要改点右上角“修改”：不用重新审批，改了什么会记在审批记录里。":
+    "To change it, click “Edit” at the top right. No re-approval is needed, and what changed is recorded in the approval history.",
+  "你还可以补充：没定大架号的钱选上同一个客户的车、还没拆的钱拆到车上、加凭证。已经拆好的和到账本身要改请找管理员。":
+    "You can still add to it: pick the same customer's vehicle for money with no VIN yet, allocate money not yet allocated, and add proof. For lines already allocated or the receipt itself, ask an admin.",
+  "已经拆好的行改不了。没定大架号的那行可以选上这个客户的车（金额可以分几台车，性质不变）；还没拆的钱可以再加一行。":
+    "Lines already allocated can't be changed. A line with no VIN yet can be given one of this customer's vehicles (the amount can be split across several vehicles, same payment type); money not yet allocated can go on a new line.",
+  "内部备注": "Internal note",
+  "客户付款": "Customer payments",
+  "{n} 个": "{n}",
+  "{customer}（没定大架号）": "{customer} (no VIN yet)",
+  "本车提成 {amt}": "commission {amt}",
 }
 
 export const EN: Record<string, string> = { ...VALUES, ...UI }

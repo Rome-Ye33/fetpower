@@ -499,6 +499,38 @@ html[lang='en'] .logo-name {
   }
 }
 
+/* 审批记录里“已修改”的那一行（42）：改了哪几项，改前 → 改后 */
+.edit-changes {
+  margin-top: 2px;
+  font-size: 13px;
+}
+.edit-change + .edit-change {
+  margin-top: 2px;
+}
+.edit-label {
+  color: #595959;
+}
+.edit-before {
+  color: #8a8f98;
+  text-decoration: line-through;
+}
+.edit-after {
+  color: #0f172a;
+  font-weight: 500;
+}
+.edit-arrow {
+  color: #8a8f98;
+}
+.edit-removed {
+  color: #8a8f98;
+  padding-left: 12px;
+  text-decoration: line-through;
+}
+.edit-added {
+  color: #237804;
+  padding-left: 12px;
+}
+
 /* 到账拆分：大架号未锁定，先记到客户名下 */
 .unlocked-box {
   margin-top: 4px;
@@ -679,6 +711,33 @@ html[lang='en'] .logo-name {
 .wb-type {
   max-width: 100%;
   overflow-x: auto;
+}
+/* 种类筛选和搜索框一行，放不下（手机）时搜索框换到下一行占满 */
+.wb-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.wb-search {
+  flex: 0 1 380px;
+  min-width: 0;
+}
+@media (max-width: 575px) {
+  .wb-search {
+    flex: 1 1 100%;
+  }
+}
+/* 搜到的字 */
+.wb-hit {
+  background: #fff1b8;
+  color: inherit;
+  padding: 0;
+  border-radius: 2px;
+}
+.wb-nohit .ant-btn-link {
+  padding-inline: 4px;
 }
 
 /* 用户与权限：提成单审批流（业务员提交 → 管理员定的几级 → 财务发放），放不下时换行，窄屏时一行一级 */

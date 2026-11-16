@@ -1,4 +1,4 @@
-import { DeleteOutlined, PrinterOutlined, SendOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, PrinterOutlined, SendOutlined } from '@ant-design/icons'
 import {
   Alert,
   App,
@@ -193,6 +193,8 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   const [rejectReason, setRejectReason] = useState('')
   const [paying, setPaying] = useState(false)
   const [payDate, setPayDate] = useState<dayjs.Dayjs>(() => dayjs(todayAccra()))
+  /** 管理员点了「修改」：改已批准、已发放的单（42） */
+  const [adminEditing, setAdminEditing] = useState(false)
   const touched = useRef<Touched>({ ...NONE_TOUCHED })
   const selRef = useRef<Sel>(EMPTY_SEL)
   /** 打开已有的草稿后第一次读到候选数据：有被去掉的车或付款要提示 */
@@ -209,7 +211,13 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   const ownFlow = parseFlow(voucher?.flow)
   /** 能改这张单的人：“提成申请单”可编辑的财务、管理员，或这张单的业务员（有审批岗位的人只能看和审别人的单） */
   const mine = !voucher || cvEdit || (mySp != null && voucher.salesperson_id === mySp)
-  const editable = !voucher || (isEditableStatus(status) && mine)
+  /**
+   * 批准以后（已批准待发放、已发放）只有管理员能改（42，Rome 2026-11-16）：点「修改」才改，
+   * 状态不变、不用重新审批，改了什么记在审批记录里。附件照旧只能加
+   */
+  const approvedLike = status === 'approved' || status === 'paid'
+  const adminEdit = !!voucher && isAdmin && adminEditing && approvedLike
+  const editable = !voucher || (isEditableStatus(status) && mine) || adminEdit
   const id = voucher?.id ?? null
   const custId = head.customer_id
   const spId = head.salesperson_id
@@ -239,8 +247,9 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
         pay: parsePayments(data.payments).map((p) => ({ claim_id: p.claim_id, share_usd: p.share_usd, note: p.note ?? '' })),
       })
       setAtts(data.attachments ?? [])
-      // 没填过汇率的老单子，下面的 effect 会带出基础资料里的汇率
-      touched.current = { ...ALL_TOUCHED, rate: data.payout_rate != null }
+      // 没填过汇率的老单子，下面的 effect 会带出基础资料里的汇率。批准以后的不带：
+      // 管理员改的时候（42）框里是存着的，不会顺手把没填的汇率也存进去
+      touched.current = { ...ALL_TOUCHED, rate: data.payout_rate != null || data.status === 'approved' || data.status === 'paid' }
       noticePrune.current = true
       setDropped(null)
       setDirty(false)
@@ -257,6 +266,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
     setDropped(null)
     setRejecting(false)
     setPaying(false)
+    setAdminEditing(false)
     setLedger([])
     setClaims([])
     setOthers([])
@@ -565,8 +575,29 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
     payments: sel.pay.map((p) => ({ claim_id: p.claim_id, share_usd: p.share_usd, note: p.note })),
   })
 
-  /** 保存（新建或改草稿），成功返回 id */
+  /** 提交（和管理员改批准过的单）之前要齐的：车、付款、提成金额、发放比例 */
+  const missing = (): string | null =>
+    !head.customer_id
+      ? t('请选客户')
+      : !sel.veh.length
+        ? t('请至少选一台车（大架号必填）')
+        : !sel.pay.length
+          ? t('请勾选客户的付款')
+          : !(num(perCar ?? head.commission_usd) > 0)
+            ? t('请填提成金额')
+            : head.payout_pct == null
+              ? t('请填本次发放比例')
+              : null
+
+  /** 保存（新建或改草稿；管理员改批准过的单），成功返回 id */
   const save = async (quiet = false): Promise<number | null> => {
+    if (adminEdit) {
+      const err = missing()
+      if (err) {
+        message.error(err)
+        return null
+      }
+    }
     if (!head.customer_id) {
       message.error(t('请选客户'))
       return null
@@ -589,9 +620,9 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
       message.error(t('保存失败：') + errorText(error))
       return null
     }
-    // 附件有变化的另存（整份换）
+    // 附件有变化的另存（整份换）。批准以后的附件只能加，加的时候已经存了（appendAtts）
     const before = voucher?.attachments ?? []
-    if (atts.length !== before.length || atts.some((x, i) => x !== before[i])) {
+    if (!adminEdit && (atts.length !== before.length || atts.some((x, i) => x !== before[i]))) {
       const res = await supabase.rpc('commission_voucher_attach', { p_id: data, p_paths: atts, p_replace: true })
       if (res.error) {
         message.error(t('附件没存上：') + errorText(res.error))
@@ -600,11 +631,30 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
         return null
       }
     }
-    if (!quiet) message.success(t('已保存'))
+    if (!quiet) message.success(adminEdit ? t('已保存修改，状态不变，改了什么记在审批记录里') : t('已保存'))
+    setAdminEditing(false)
     setChanged(true)
     notifyVouchersChanged()
     await loadVoucher(data)
     return data
+  }
+
+  /** 管理员不改了：有改动就问一句，再按存好的重新读 */
+  const cancelAdminEdit = () => {
+    const back = async () => {
+      setAdminEditing(false)
+      if (id) await loadVoucher(id)
+    }
+    if (!dirty) {
+      void back()
+      return
+    }
+    modal.confirm({
+      title: t('改动还没保存，确定不改了？'),
+      okText: t('不改了'),
+      cancelText: t('继续改'),
+      onOk: back,
+    })
   }
 
   /** 提交以后补附件：马上存，只能加 */
@@ -650,17 +700,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   }
 
   const submit = async () => {
-    const err = !head.customer_id
-      ? t('请选客户')
-      : !sel.veh.length
-        ? t('请至少选一台车（大架号必填）')
-        : !sel.pay.length
-          ? t('请勾选客户的付款')
-          : !(num(perCar ?? head.commission_usd) > 0)
-            ? t('请填提成金额')
-            : head.payout_pct == null
-              ? t('请填本次发放比例')
-              : null
+    const err = missing()
     if (err) {
       message.error(err)
       return
@@ -736,9 +776,11 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   // 全部批完、还没发放的，这张单的最后一级可以退回
   const lastStep = ownFlow[ownFlow.length - 1]?.step ?? 'company_head'
   const canReject = !!id && (canApprove || (status === 'approved' && (isAdmin || posts.includes(lastStep))))
-  const canPay = !!id && status === 'approved' && cvEdit
-  const canUnpay = !!id && status === 'paid' && isAdmin
-  const canDelete = !!id && editable
+  const canPay = !!id && status === 'approved' && cvEdit && !adminEdit
+  const canUnpay = !!id && status === 'paid' && isAdmin && !adminEdit
+  const canDelete = !!id && editable && !adminEdit
+  /** 草稿、退回的：保存草稿、提交 */
+  const draftEdit = editable && !adminEdit
 
   const title = !id
     ? t('新建提成单')
@@ -989,7 +1031,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
       destroyOnHidden
       extra={
         <Space wrap>
-          {id && (
+          {id && !adminEdit && (
             <Button icon={<PrinterOutlined />} onClick={() => printVoucher(id)}>
               {t('打印')}
             </Button>
@@ -1004,7 +1046,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
               {t('撤回')}
             </Button>
           )}
-          {canReject && (
+          {canReject && !adminEdit && (
             <Button
               danger
               onClick={() => {
@@ -1016,14 +1058,27 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
             </Button>
           )}
           {canUnpay && <Button onClick={unpay}>{t('取消发放')}</Button>}
-          {editable && (
+          {draftEdit && (
             <Button loading={busy === 'save'} onClick={() => void save()}>
               {t('保存草稿')}
             </Button>
           )}
-          {editable && (
+          {draftEdit && (
             <Button type="primary" icon={<SendOutlined />} loading={busy === 'submit'} onClick={() => void submit()}>
               {t('提交')}
+            </Button>
+          )}
+          {!!id && isAdmin && approvedLike && !adminEditing && (
+            <Tooltip title={t('批准以后只有管理员能改；改了状态不变、不用重新审批，记在审批记录里')}>
+              <Button icon={<EditOutlined />} onClick={() => setAdminEditing(true)}>
+                {t('修改')}
+              </Button>
+            </Tooltip>
+          )}
+          {adminEdit && <Button onClick={cancelAdminEdit}>{t('取消修改')}</Button>}
+          {adminEdit && (
+            <Button type="primary" loading={busy === 'save'} onClick={() => void save()}>
+              {t('保存修改')}
             </Button>
           )}
           {canApprove && step && (
@@ -1061,6 +1116,20 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
             style={{ marginBottom: 12 }}
             title={t('被退回：{reason}', { reason: voucher.reject_note })}
             description={t('{name} 于 {when} 退回。改好后重新提交。', { name: voucher.rejected_name ?? '', when: dateTime(voucher.rejected_at) })}
+          />
+        )}
+        {adminEdit && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            className="approved-lock"
+            title={status === 'paid' ? t('正在修改已发放的提成单') : t('正在修改已批准的提成单')}
+            description={
+              status === 'paid'
+                ? t('改好点“保存修改”：还是已发放、不用重新审批，改了什么会记在审批记录里。钱已经发了，改了金额要自己和业务员多退少补。')
+                : t('改好点“保存修改”：还是已批准待发放、不用重新审批，改了什么会记在审批记录里。')
+            }
           />
         )}
         {dropped && <Alert type="warning" showIcon closable style={{ marginBottom: 12 }} title={dropped} onClose={() => setDropped(null)} />}
@@ -1395,10 +1464,10 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
             value={atts}
             prefix={cvEdit ? 'cv' : `sub/${myUid ?? ''}`}
             readOnly={!editable && !id}
-            canRemove={editable}
-            paste={editable}
+            canRemove={draftEdit}
+            paste={draftEdit}
             onChange={
-              editable
+              draftEdit
                 ? (paths) => {
                     setAtts(paths)
                     setDirty(true)
@@ -1407,7 +1476,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
             }
           />
           <div className="hint" style={{ marginTop: 4 }}>
-            {editable
+            {draftEdit
               ? t('合同、付款凭证、聊天截图等，图片、PDF、Excel、Word 都可以。保存或提交时一起存。')
               : t('审批的人也可以补附件。提交以后附件只能加，不能去掉。')}
           </div>

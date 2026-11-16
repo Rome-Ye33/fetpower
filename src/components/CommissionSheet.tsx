@@ -14,6 +14,7 @@ import {
   voucherStatus,
 } from '../lib/commission'
 import type { CommissionVoucher } from '../lib/commission'
+import { changeSummary, parseChanges, zhOnly } from '../lib/editChanges'
 import { stepPrintNames, voucherFlow } from '../lib/flow'
 import { dateTime, money, num, shortDate } from '../lib/format'
 import { useRefData } from '../lib/refdata'
@@ -28,6 +29,7 @@ import type { ApprovalLog } from '../lib/workbench'
 // 内容是提交时存下的车和付款，审批后再改到账也不会变。签名栏是这张单走的审批流（提交时记下的；草稿是现在的审批流）。
 // 签名栏下面是“审批过程”（Rome 2026-11-12：打印上要体现审批的过程）：approval_logs 里这张单的每一步，
 // 谁、什么时候、做了什么（提交、哪一级通过、退回和原因、重新提交、撤回、发放），按时间先后。还没提交过的草稿没有这一栏。
+// 批准以后管理员改过（42）记一行“修改”，意见栏写改了哪几项、改前 → 改后。
 
 /** 中文 + 英文（对照表里有英文的才加） */
 function bi(zh: string | null | undefined): string {
@@ -508,7 +510,7 @@ export default function CommissionSheet({
                   </td>
                   <td>{r.actor_name ?? ''}</td>
                   <td className="c">{dateTime(r.at)}</td>
-                  <td>{r.note ?? ''}</td>
+                  <td>{r.action === 'edit' ? changeSummary(parseChanges(r.changes), zhOnly) : (r.note ?? '')}</td>
                 </tr>
               )
             })}

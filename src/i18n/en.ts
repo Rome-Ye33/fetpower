@@ -157,6 +157,14 @@ const VALUES: Record<string, string> = {
   "找不到这张提成单，或没有权限修改": "Commission voucher not found, or you are not allowed to change it",
   "提成单已经提交，不能再改；要改请先撤回，或请审核人退回":
     "This voucher has been submitted and can't be changed. Withdraw it first, or ask the reviewer to return it.",
+  // 审批通过以后只有管理员能改（SQL 42）
+  "提成单已经批准，只有管理员能改；要改请找管理员": "This voucher has been approved; only an admin can change it. Please ask an admin.",
+  "这笔到账已经生效，只有管理员能改；要改请找管理员": "This receipt is in effect; only an admin can change it. Please ask an admin.",
+  "这笔到账已经生效，凭证只能加、不能删；要删请找管理员": "This receipt is in effect: proof can be added but not removed. Please ask an admin to remove it.",
+  "这笔到账已经生效，已经拆到车上的那几行只有管理员能改；要改请找管理员":
+    "This receipt is in effect: lines already allocated to vehicles can only be changed by an admin. Please ask an admin.",
+  "这笔到账已经生效：没定大架号的钱只能补到同一个客户的车上（款项性质不变），不能挪给别的客户；要改请找管理员":
+    "This receipt is in effect: money with no VIN yet can only go to the same customer's vehicles (same payment type), not to another customer. Please ask an admin.",
   "每台车都要从系统里选（大架号必填）": "Pick every vehicle from the system (VIN required)",
   "同一台车填了两次": "The same vehicle is listed twice",
   "这些车不是这个客户或这个业务员名下的：{list}": "These vehicles don't belong to this customer and salesperson: {list}",
@@ -334,7 +342,6 @@ const VALUES: Record<string, string> = {
   "本周到期": "Due this week",
   "到期还没存": "Overdue, not deposited",
   "已存没到账": "Deposited, not cleared",
-  "已到账没报回款": "Cleared, not reported",
   "主表": "Main sheet",
   "其他支票明细": "Other cheques",
   "已报回款": "Reported",
@@ -394,7 +401,7 @@ const VALUES: Record<string, string> = {
   "不可见": "Hidden",
   "只看": "View only",
   "可编辑": "Can edit",
-  "录到账、拆分、审核业务员提交、请业务员填写、报款": "Enter receipts, allocate them, review salesperson submissions, ask a salesperson to fill in, report",
+  "录到账、拆分、审核业务员提交、请业务员填写": "Enter receipts, allocate them, review salesperson submissions, ask a salesperson to fill in",
   "录支票、存票、退票、导入表格": "Enter cheques, deposit, mark bounced, import the sheet",
   "新增、修改、导入车辆，录期初、优惠折让": "Add, edit and import vehicles; enter opening balances and discounts",
   "替业务员开提成单、修改、标记发放": "Create commission vouchers for salespeople, edit them, mark them paid out",
@@ -563,7 +570,6 @@ const UI: Record<string, string> = {
   // 菜单、页头
   "业财管理": "Sales & Finance",
   "到账录入": "Receipts",
-  "报款": "Reports",
   "车辆台账": "Vehicle ledger",
   "银行对账": "Bank reconciliation",
   "基础资料": "Master data",
@@ -693,10 +699,6 @@ const UI: Record<string, string> = {
   "这个邮箱不在邀请名单上，请联系管理员": "This email is not on the invite list. Please contact an admin.",
 
   // 到账列表
-  "需发修改": "Correction needed",
-  "已报 {date}": "Reported {date}",
-  "未报": "Not reported",
-  "已报": "Reported",
   "到账": "Receipts",
   "到账日期": "Date received",
   "收款账户": "Receiving account",
@@ -709,7 +711,6 @@ const UI: Record<string, string> = {
   "最近 30 天": "Last 30 days",
   "今年": "This year",
   "拆分状态": "Allocation status",
-  "报款状态": "Report status",
   "编号、摘要、参考号、支票号": "No., narration, reference, cheque no.",
   "共 {n} 笔，已生效合计 {usd}": "{n} receipts, total in effect {usd}",
   "审批": "Approval",
@@ -729,8 +730,7 @@ const UI: Record<string, string> = {
   "拆分合计 {a} 超过到账金额 {b}": "The lines add up to {a}, more than the amount received {b}",
   "通过失败：": "Approval failed: ",
   "保存失败：": "Save failed: ",
-  "已通过，生成了正式到账，报款文字在下面": "Approved. The receipt has been created; the report text is below.",
-  "已保存，报款文字在下面": "Saved. The report text is below.",
+  "已通过，生成了正式到账": "Approved. The receipt has been created.",
   "请写退回原因，业务员会看到": "Write the reason for returning it. The salesperson will see it.",
   "这条提交已经处理过了，请刷新后再看": "This submission has already been handled. Please refresh.",
   "已退回给业务员": "Returned to the salesperson",
@@ -752,7 +752,7 @@ const UI: Record<string, string> = {
     "{customer} · {sp} · contract {contract} · received {received} · balance {balance}",
   "不选车时选客户": "Customer (if no vehicle)",
   "金额 {cur}": "Amount {cur}",
-  "报款备注（可空）": "Report note (optional)",
+  "备注（可空）": "Note (optional)",
   "如：老板给予$500折扣": "e.g. Boss gave a $500 discount",
   "到账 {no}": "Receipt {no}",
   "审核业务员提交 #{id}": "Review submission #{id}",
@@ -785,7 +785,6 @@ const UI: Record<string, string> = {
   "付款方 / 银行摘要": "Payer / bank narration",
   "如 TRF FROM ABC LTD": "e.g. TRF FROM ABC LTD",
   "银行参考号（有就填）": "Bank reference (if any)",
-  "内部备注（不进报款）": "Internal note (not in the report)",
   "凭证": "Proof of payment",
   "银行导入": "Bank import",
   "拆分到车": "Allocate to vehicles",
@@ -796,8 +795,6 @@ const UI: Record<string, string> = {
   "剩余 {amt} 退还客户": "Refund the remaining {amt} to the customer",
   "一笔钱付多台车时，每台车一行；金额按业务员通知的原币填写。还不知道是哪台车的，不选车、选客户。":
     "If one payment covers several vehicles, use one line per vehicle. Enter amounts in the original currency, as the salesperson reported. If the vehicle isn't known yet, choose the customer instead.",
-  "报款文字": "Report text",
-  "有改动还没保存，保存后这里会更新。": "You have unsaved changes. This updates after you save.",
   "退回给业务员": "Return to the salesperson",
   "写清楚哪里不对、要怎么改，业务员会看到，改好后重新提交。":
     "Say what is wrong and how to fix it. The salesperson will see this and resubmit after fixing it.",
@@ -870,34 +867,6 @@ const UI: Record<string, string> = {
   "拆分加起来 {a}，比到账金额 {b} 多，请核对": "The lines add up to {a}, more than the amount received {b}. Please check.",
   "拆分加起来 {a}，比到账金额 {b} 少，剩下的还没分到车上":
     "The lines add up to {a}, less than the amount received {b}. The rest is not allocated yet.",
-  // 报款文字框
-  "已复制，可以粘贴到群里": "Copied. You can paste it into the group.",
-  "复制失败，请手动选中文字复制": "Copy failed. Select the text and copy it by hand.",
-  "这笔还没有拆分到车，报款文字不完整": "This receipt isn't allocated to vehicles yet, so the report text is incomplete.",
-  "还有 {currency} {pending} 没有拆分（如果要退还客户，请加一行“退款”）":
-    "{currency} {pending} is not allocated yet (to refund it to the customer, add a “Refund” line).",
-  "复制报款文字": "Copy report text",
-  "已标记为已发群": "Marked as posted to the group",
-  "标记已发群": "Mark as posted",
-  "已标记修改信息已发": "Correction marked as posted",
-  "修改信息已发群": "Correction posted",
-  "已报款": "Reported",
-  "报款后有改动，需要发修改信息": "Changed after it was reported. Post a correction.",
-  "撤销“已发群”？": "Undo “posted to the group”?",
-  "撤销后这笔会回到待报款列表。": "The receipt goes back to the list of reports to post.",
-  "已撤销": "Undone",
-  "撤销已发": "Undo posted",
-  "手工改文字": "Edit text by hand",
-  "已恢复自动生成": "Back to the automatic text",
-  "恢复自动生成": "Use automatic text",
-  "这笔用的是手工修改过的文字，拆分改动后不会自动更新。":
-    "This receipt uses text edited by hand. It won't update when the allocation changes.",
-  "手工修改报款文字": "Edit report text",
-  "已保存手工文字": "Text saved",
-  "特殊情况（代付、换车差额等）公式写不出来时用。保存后这笔一直用这段文字，直到点“恢复自动生成”。":
-    "For special cases the automatic text can't handle (payment by a third party, a vehicle swap difference, etc.). Once saved, this receipt keeps this text until you click “Use automatic text”.",
-
-  // 报款页
 
   // 业务员提交到账
   "提交新的到账": "Submit a new payment",
@@ -1469,6 +1438,11 @@ const UI: Record<string, string> = {
   "审批记录": "Approval history",
   "系统": "System",
   "原因：{note}": "Reason: {note}",
+  "搜单号、客户、大架号、业务员、金额、账户": "Search no., customer, VIN, salesperson, amount, account",
+  "这一栏没有搜到“{q}”": "Nothing in this tab matches “{q}”",
+  "没有搜到“{q}”": "Nothing matches “{q}”",
+  "在这几栏里有：": "Found in:",
+  "搜到 {n} 条": "{n} found",
 
   // 用户与权限：提成单审批流
   "提成单审批流": "Commission voucher approval flow",
@@ -1563,9 +1537,9 @@ const UI: Record<string, string> = {
   "还没有审批级别，提成单提交不了。点“调整审批流”加级别。": "No approval levels yet, so vouchers can't be submitted. Click “Edit flow” to add some.",
   "到账审批流": "Receipt approval flow",
   "财务录入到账": "Finance enters receipt",
-  "生效（算到账、可报款）": "Takes effect (counts as received)",
-  "财务录的到账、业务员提交经财务审核转成的到账，录入后都按这个顺序一级一级审，全部通过才算到账（才进余额和报表、才能报款）。一个岗位可以有几个人（谁先审都行），管理员任何一级都可以代办；审批人可以是业务员账号，他只看得到走审批的到账。":
-    "Every receipt, whether entered by finance or created from a salesperson's submission after finance review, is approved in this order, one level at a time. It only counts as received (goes into balances and reports, and can be reported to the group) once every level has approved. A post can have several people (any one of them can approve), and an admin can act on any level. An approver can also be a sales account; they only see receipts that go through approval.",
+  "生效（算到账）": "Takes effect (counts as received)",
+  "财务录的到账、业务员提交经财务审核转成的到账，录入后都按这个顺序一级一级审，全部通过才算到账（才进余额和报表）。一个岗位可以有几个人（谁先审都行），管理员任何一级都可以代办；审批人可以是业务员账号，他只看得到走审批的到账。":
+    "Every receipt, whether entered by finance or created from a salesperson's submission after finance review, is approved in this order, one level at a time. It only counts as received (goes into balances and reports) once every level has approved. A post can have several people (any one of them can approve), and an admin can act on any level. An approver can also be a sales account; they only see receipts that go through approval.",
   "要加一级、删一级、改名字或调顺序，点右上角“调整审批流”；改了只影响之后录入的到账。":
     " To add or remove a level, rename one or change the order, click “Edit flow” at the top right. Changes only apply to receipts entered afterwards.",
   "还没有审批级别：现在到账录入后直接生效。点“调整审批流”加级别。": "No approval levels yet: receipts take effect as soon as they are entered. Click “Edit flow” to add some.",
@@ -1591,8 +1565,8 @@ const UI: Record<string, string> = {
   // 到账撤回（24）
   "已撤回，不算到账了。改好后点“重新提交”": "Withdrawn. It no longer counts as received. Fix it and click “Submit again”.",
   "撤回这笔到账？": "Withdraw this receipt?",
-  "撤回后不算到账（不进余额和报表、不能报款）。改好后可以重新提交；不要了请管理员删掉。":
-    "Once withdrawn it no longer counts as received (not in balances or reports, and it can't be reported). You can fix it and submit it again, or ask an admin to delete it.",
+  "撤回后不算到账（不进余额和报表）。改好后可以重新提交；不要了请管理员删掉。":
+    "Once withdrawn it no longer counts as received (not in balances or reports). You can fix it and submit it again, or ask an admin to delete it.",
   "第一级还没人批，可以撤回；撤回后不算到账": "Nobody has approved the first level yet, so you can still withdraw it. A withdrawn receipt does not count as received.",
   "已撤回，不算到账": "Withdrawn. It does not count as received.",
   "改好后点“重新提交”，按现在的审批流从第一级开始；不要了请管理员删掉。": "Fix it and click “Submit again”; it restarts at the first level of the current flow. If it is not needed, ask an admin to delete it.",
@@ -1600,12 +1574,10 @@ const UI: Record<string, string> = {
   "轮到你审批了：这一级是{name}": "Your turn to approve: this level is {name}",
   "核对凭证、金额和拆分，没问题点“通过”，不对点“退回”写明原因。": "Check the proof, the amount and the allocation. If it's fine click “Approve”; if not click “Return” and say why.",
   "审批中，等{name}审批": "In approval, waiting for {name}",
-  "批完才算到账（才进余额和报表、才能报款）。改了日期、账户、金额或汇率会从第一级重新审批。":
-    "It counts as received only once approval is complete (then it goes into balances and reports and can be reported). Changing the date, account, amount or rate restarts approval from the first level.",
+  "批完才算到账（才进余额和报表）。改了日期、账户、金额或汇率会从第一级重新审批。":
+    "It counts as received only once approval is complete (then it goes into balances and reports). Changing the date, account, amount or rate restarts approval from the first level.",
   "录入": "Entered",
   "生效": "In effect",
-  "已生效。改了日期、账户、金额或汇率会回到审批中，重新批完才再算到账。": "In effect. Changing the date, account, amount or rate sends it back into approval; it counts as received again once re-approved.",
-  "审批通过（生效）后才能报款。": "It can be reported once approval is complete (in effect).",
   // 到账互审（SQL 25）
   "待{name}确认": "Awaiting {name}'s confirmation",
   "业务员本人确认": "Confirmed by the salesperson",
@@ -1648,7 +1620,6 @@ const UI: Record<string, string> = {
   "录错了才删；客户收回、作废的请用“取消”并写原因，好留下记录。": "Delete only if it was entered by mistake. If the customer took it back or it was voided, use “Cancel” and give the reason, so there is a record.",
   "这张支票删不了（已经对上到账的先取消关联）": "This cheque can't be deleted (unlink the receipt first)",
   "支票": "Cheque",
-  "未报回款": "Not reported",
   "支票名称": "Name on cheque",
   "支票银行": "Cheque bank",
   "支票金额": "Cheque amount",
@@ -1672,7 +1643,6 @@ const UI: Record<string, string> = {
   "存票日期": "Deposit date",
   "已存 {n} 天": "Deposited {n} days ago",
   "存票账户": "Deposit account",
-  "还没报回款，到到账录入里报": "Not reported yet. Report it under Receipts.",
   "原因": "Reason",
   "存票": "Deposit",
   "定计划存票日期": "Plan deposit date",
@@ -2199,6 +2169,41 @@ const UI: Record<string, string> = {
   "还有 {n} 笔记了、银行流水里还没有的（标「等流水」），不算进余额。流水导进来自动对上：参考号 / 支票号对得上的，或者同金额、日期相差 3 天内只有一笔的；分不清的在待填的流水上点「对上已记的」选。": "{n} recorded items are not in the bank statement yet (marked “Awaiting statement”) and are not counted in the balance. They are matched automatically when the statement is imported: by reference / cheque number, or by the same amount within 3 days when there is only one candidate; ambiguous ones are picked with “Match recorded entry” on the line to fill in.",
   "先导银行流水，再一条一条填。导进来的流水自动对上已经录了的（到账、银行日记账里先记的收付）：先按支票号 / 参考号，再按同账户、同金额、日期相差 3 天内，只对上分得清的（一条流水只有一笔对得上）；分不清的（比如同一天几笔一样的金额）留着，由人点「对上已记的」或「关联已录的」选。配不上的收款在「银行有、没人报」里录成到账；付出去的在「付款待填」里填业务模块和摘要。填好的流水就是银行日记账。": "Import the bank statement first, then fill in each line. Imported lines are matched automatically to what has already been recorded (receipts, and entries recorded first in the bank journal): first by cheque / reference number, then by same account, same amount and within 3 days, and only where it is unambiguous (one line, one candidate). Ambiguous cases (e.g. several identical amounts on the same day) are left for a person to pick with “Match recorded entry” or “Link to existing”. Money in that matches nothing is recorded under “In the bank, not reported”; money out is filled in with a category and narration under “Payments to fill in”. The filled-in statement is the bank journal.",
   "银行流水里付出去、还没填的。点「填付款」选业务模块、写摘要（日期、账户、金额照银行的）；在银行日记账里先记了的点「对上已记的」；转到自己别的账户的点「互转」；手续费这类小额的勾上几条「一起填」；银行冲正之类不算收付的点「忽略」。": "Money paid out in the bank statement that has not been filled in yet. Click “Fill in payment” to choose a category and write a narration (date, account and amount come from the bank); if it was already recorded in the bank journal, use “Match recorded entry”; use “Transfer” for money sent to another of our accounts; tick several small items such as bank charges and use “Fill in together”; use “Ignore” for bank reversals that are not real payments.",
+  // 审批通过以后只有管理员能改（42）
+  "取消修改": "Cancel edit",
+  "改动还没保存，确定不改了？": "Your changes are not saved. Stop editing anyway?",
+  "不改了": "Discard changes",
+  "继续改": "Keep editing",
+  "已保存修改，状态不变，改了什么记在审批记录里": "Changes saved. The status stays the same; what changed is recorded in the approval history.",
+  "批准以后只有管理员能改；改了状态不变、不用重新审批，记在审批记录里":
+    "Once approved, only an admin can change it. The status stays the same, no re-approval is needed, and the change is recorded in the approval history.",
+  "正在修改已发放的提成单": "Editing a paid-out commission voucher",
+  "正在修改已批准的提成单": "Editing an approved commission voucher",
+  "改好点“保存修改”：还是已发放、不用重新审批，改了什么会记在审批记录里。钱已经发了，改了金额要自己和业务员多退少补。":
+    "Click “Save changes” when done: it stays paid out, no re-approval is needed, and what changed is recorded in the approval history. The money has already been paid, so settle any difference with the salesperson yourself.",
+  "改好点“保存修改”：还是已批准待发放、不用重新审批，改了什么会记在审批记录里。":
+    "Click “Save changes” when done: it stays approved and awaiting payout, no re-approval is needed, and what changed is recorded in the approval history.",
+  "顺序变了": "Order changed",
+  "这笔到账已经生效：没定大架号的钱只能补到同一个客户的车上；要改请找管理员":
+    "This receipt is in effect: money with no VIN yet can only go to the same customer's vehicles. Please ask an admin for anything else.",
+  "已保存，改了什么记在审批记录里": "Saved. What changed is recorded in the approval history.",
+  "已生效的到账只有管理员能改；改了不用重新审批，记在审批记录里":
+    "Only an admin can change a receipt that is in effect. No re-approval is needed, and the change is recorded in the approval history.",
+  "正在修改已生效的到账": "Editing a receipt that is in effect",
+  "已生效：只有管理员能改": "In effect: only an admin can change it",
+  "改好点“保存修改”：不用重新审批，改了什么会记在审批记录里。和银行流水配对的，账户、日期、金额照旧不能改。":
+    "Click “Save changes” when done: no re-approval is needed, and what changed is recorded in the approval history. If it is matched to a bank line, the account, date and amount still can't be changed.",
+  "要改点右上角“修改”：不用重新审批，改了什么会记在审批记录里。":
+    "To change it, click “Edit” at the top right. No re-approval is needed, and what changed is recorded in the approval history.",
+  "你还可以补充：没定大架号的钱选上同一个客户的车、还没拆的钱拆到车上、加凭证。已经拆好的和到账本身要改请找管理员。":
+    "You can still add to it: pick the same customer's vehicle for money with no VIN yet, allocate money not yet allocated, and add proof. For lines already allocated or the receipt itself, ask an admin.",
+  "已经拆好的行改不了。没定大架号的那行可以选上这个客户的车（金额可以分几台车，性质不变）；还没拆的钱可以再加一行。":
+    "Lines already allocated can't be changed. A line with no VIN yet can be given one of this customer's vehicles (the amount can be split across several vehicles, same payment type); money not yet allocated can go on a new line.",
+  "内部备注": "Internal note",
+  "客户付款": "Customer payments",
+  "{n} 个": "{n}",
+  "{customer}（没定大架号）": "{customer} (no VIN yet)",
+  "本车提成 {amt}": "commission {amt}",
 }
 
 export const EN: Record<string, string> = { ...VALUES, ...UI }

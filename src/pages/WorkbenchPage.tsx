@@ -1,6 +1,7 @@
 import { FileDoneOutlined, ReloadOutlined, SendOutlined } from '@ant-design/icons'
-import { App, Badge, Button, Card, Empty, Pagination, Segmented, Space, Spin, Tabs, Tag, Typography } from 'antd'
-import { useCallback, useEffect, useState } from 'react'
+import { App, Badge, Button, Card, Empty, Input, Pagination, Segmented, Space, Spin, Tabs, Tag, Typography } from 'antd'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import CommissionEditor from '../components/CommissionEditor'
 import ReceiptEditor from '../components/ReceiptEditor'
@@ -13,6 +14,7 @@ import { useRefData } from '../lib/refdata'
 import { claimsSummary, isFillRequest } from '../lib/submissions'
 import type { Submission } from '../lib/submissions'
 import { supabase } from '../lib/supabase'
+import { claimSalespersons, searchFilter, searchRegex, searchWords } from '../lib/wbSearch'
 import { BOX_LABEL, BOX_ORDER, BOXES, boxCounts, boxQuery, DOC_COLOR, DOC_LABEL, docType, useDocLabels } from '../lib/workbench'
 import type { Box, DocType, WorkItem } from '../lib/workbench'
 
@@ -23,6 +25,9 @@ type TypeFilter = DocType | 'all'
 type Counts = Record<Box, number | null>
 const NO_COUNTS: Counts = { todo: null, done: null, mine: null, ended: null, cc: null }
 
+/** 打字停这么久再搜（回车、点放大镜马上搜），免得每敲一个字查一次数据库 */
+const SEARCH_DELAY = 400
+
 const EMPTY_TEXT: Record<Box, string> = {
   todo: '没有待办，都处理完了',
   done: '没有处理过、还在流程中的单据',
@@ -31,7 +36,21 @@ const EMPTY_TEXT: Record<Box, string> = {
   cc: '没有抄送给你的单据',
 }
 
-function ItemCard({ it, box, showSp, onOpen }: { it: WorkItem; box: Box; showSp: boolean; onOpen: () => void }) {
+/** 搜索时把对上的字标出来 */
+function hl(text: string | null | undefined, re: RegExp | null): ReactNode {
+  if (!text || !re) return text
+  return text.split(re).map((part, i) =>
+    i % 2 ? (
+      <mark key={i} className="wb-hit">
+        {part}
+      </mark>
+    ) : (
+      part
+    ),
+  )
+}
+
+function ItemCard({ it, box, showSp, re, onOpen }: { it: WorkItem; box: Box; showSp: boolean; re: RegExp | null; onOpen: () => void }) {
   const t = useT()
   const labels = useDocLabels()
   const { accountById } = useRefData()
@@ -51,20 +70,22 @@ function ItemCard({ it, box, showSp, onOpen }: { it: WorkItem; box: Box; showSp:
     amountText
   ) : isRec ? (
     <span>
-      <b>{it.doc_no}</b> · {amountText}
+      <b>{hl(it.doc_no, re)}</b> · {amountText}
     </span>
   ) : (
     <span>
-      <b>{it.doc_no ?? t('草稿 #{id}', { id: it.doc_id ?? '' })}</b>
-      {it.customer_name && <span> · {it.customer_name}</span>}
+      <b>{it.doc_no ? hl(it.doc_no, re) : t('草稿 #{id}', { id: it.doc_id ?? '' })}</b>
+      {it.customer_name && <span> · {hl(it.customer_name, re)}</span>}
     </span>
   )
 
   const details: string[] =
     isSub || isRec ? claimsSummary(it, t) : [[t('{n} 台', { n: it.vehicle_count ?? 0 }), it.vins].filter(Boolean).join(' · ')]
 
+  // 到账的业务员在拆分里（一笔钱可以分给几个业务员的车）
+  const sp = isRec ? claimSalespersons(it.claims).join('、') : it.salesperson_name
   const meta = [
-    showSp && !isRec ? it.salesperson_name : null,
+    showSp ? sp || null : null,
     isSub || isRec ? accountById.get(it.account_id ?? 0)?.short_name : null,
     isSub || isRec ? t('到账 {date}', { date: it.doc_date ?? '' }) : it.amount != null ? t('本次发放 {amt}', { amt: '$ ' + money(it.amount) }) : null,
   ].filter(Boolean)
@@ -91,17 +112,17 @@ function ItemCard({ it, box, showSp, onOpen }: { it: WorkItem; box: Box; showSp:
       </div>
       {details.map((line, i) => (
         <div key={i} className="wb-line">
-          {line}
+          {hl(line, re)}
         </div>
       ))}
-      {meta.length > 0 && <div className="hint wb-line">{meta.join(' · ')}</div>}
+      {meta.length > 0 && <div className="hint wb-line">{hl(meta.join(' · '), re)}</div>}
       {it.status === 'rejected' && it.last_action === 'reject' && it.last_note && (
         <div className="text-danger wb-line">{t('退回原因：{reason}', { reason: it.last_note })}</div>
       )}
       {isReq && it.status === 'requested' && it.last_action === 'request' && it.last_note && (
         <div className="text-warn wb-line">{t('财务说：{note}', { note: it.last_note })}</div>
       )}
-      {isSub && it.status === 'approved' && it.receipt_no && <div className="text-ok wb-line">{t('到账编号 {no}', { no: it.receipt_no })}</div>}
+      {isSub && it.status === 'approved' && it.receipt_no && <div className="text-ok wb-line">{hl(t('到账编号 {no}', { no: it.receipt_no }), re)}</div>}
       <div className="hint wb-line" style={{ marginTop: 4 }}>
         {progress}
       </div>
@@ -118,6 +139,7 @@ export default function WorkbenchPage() {
   // 有审批岗位的人会看到别的业务员的提成单，卡片上要写是谁的
   const showSp = isStaff || posts.length > 0
   const isSales = role === 'sales'
+  const { accounts, salespersons } = useRefData()
   const [box, setBox] = useState<Box>('todo')
   const [type, setType] = useState<TypeFilter>('all')
   const [page, setPage] = useState(1)
@@ -129,25 +151,50 @@ export default function WorkbenchPage() {
   const [subForm, setSubForm] = useState<{ open: boolean; sub: Submission | null }>({ open: false, sub: null })
   const [review, setReview] = useState<Submission | null>(null)
   const [receiptId, setReceiptId] = useState<number | null>(null)
+  // 搜索：q 是框里的字，search 是已经在搜的（停手一会儿或回车后）。一个框管五栏，和种类筛选叠加
+  const [q, setQ] = useState('')
+  const [search, setSearch] = useState('')
+  const words = useMemo(() => searchWords(search), [search])
+  const filter = useMemo(() => searchFilter(words, { accounts, salespersons }), [words, accounts, salespersons])
+  const re = useMemo(() => searchRegex(words), [words])
+  const searching = filter !== null
 
+  useEffect(() => {
+    if (q === search) return
+    const h = window.setTimeout(() => {
+      setSearch(q)
+      setPage(1)
+    }, SEARCH_DELAY)
+    return () => window.clearTimeout(h)
+  }, [q, search])
+  const applySearch = (v: string) => {
+    setQ(v)
+    setSearch(v)
+    setPage(1)
+  }
+
+  const seq = useRef(0)
   const load = useCallback(async () => {
+    const mine = ++seq.current
     setLoading(true)
     const order = BOX_ORDER[box]
     const from = (page - 1) * PAGE
-    // 列表 + 一个数数字的查询（原来是列表 + 每栏一个计数查询，一共 6 个）
+    // 列表 + 一个数数字的查询（原来是列表 + 每栏一个计数查询，一共 6 个）；搜索时两个都带搜索条件
     const [list, boxes] = await Promise.all([
-      boxQuery(box, type, 'exact')
+      boxQuery(box, type, 'exact', false, filter)
         .order(order.column, { ascending: order.ascending, nullsFirst: false })
         .order('doc_id', { ascending: order.ascending })
         .range(from, from + PAGE - 1),
-      boxCounts(type),
+      boxCounts(type, filter),
     ])
+    // 搜索词改得快时，晚回来的旧结果不要盖掉新的
+    if (mine !== seq.current) return
     setRows(list.data ?? [])
     setTotal(list.count ?? 0)
     setCounts(boxes)
     setLoading(false)
     if (list.error) message.error(list.error.message)
-  }, [box, type, page, message])
+  }, [box, type, page, filter, message])
 
   useEffect(() => {
     void load()
@@ -234,9 +281,15 @@ export default function WorkbenchPage() {
     if (changed) void load()
   }
 
+  const switchBox = (b: Box) => {
+    setBox(b)
+    setPage(1)
+  }
+
   const tabLabel = (b: Box) => {
     const n = counts[b]
-    if (b === 'todo')
+    // 搜索时数字是“搜到几件”，待办也用灰字，不用红色角标
+    if (b === 'todo' && !searching)
       return (
         <Badge count={n ?? 0} size="small" offset={[8, -2]}>
           {t(BOX_LABEL[b])}
@@ -249,6 +302,24 @@ export default function WorkbenchPage() {
       </span>
     )
   }
+
+  // 这一栏没搜到：别的栏里有的话列出来，点一下过去
+  const elsewhere = BOXES.filter((b) => b !== box && (counts[b] ?? 0) > 0)
+  const noHit = (
+    <div className="wb-nohit">
+      <div>{elsewhere.length ? t('这一栏没有搜到“{q}”', { q: search.trim() }) : t('没有搜到“{q}”', { q: search.trim() })}</div>
+      {elsewhere.length > 0 && (
+        <div>
+          {t('在这几栏里有：')}
+          {elsewhere.map((b) => (
+            <Button key={b} type="link" size="small" onClick={() => switchBox(b)}>
+              {t(BOX_LABEL[b])} {counts[b]}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <div>
@@ -274,34 +345,40 @@ export default function WorkbenchPage() {
       <Tabs
         className="wb-tabs"
         activeKey={box}
-        onChange={(k) => {
-          setBox(k as Box)
-          setPage(1)
-        }}
+        onChange={(k) => switchBox(k as Box)}
         items={BOXES.map((b) => ({ key: b, label: tabLabel(b) }))}
       />
-      <Segmented
-        className="wb-type"
-        value={type}
-        onChange={(v) => {
-          setType(v as TypeFilter)
-          setPage(1)
-        }}
-        options={[
-          { value: 'all', label: t('全部') },
-          { value: 'submission', label: t(DOC_LABEL.submission) },
-          { value: 'receipt', label: t(DOC_LABEL.receipt) },
-          { value: 'voucher', label: t(DOC_LABEL.voucher) },
-        ]}
-        style={{ marginBottom: 12, maxWidth: '100%', overflowX: 'auto' }}
-      />
+      <div className="wb-filters">
+        <Segmented
+          className="wb-type"
+          value={type}
+          onChange={(v) => {
+            setType(v as TypeFilter)
+            setPage(1)
+          }}
+          options={[
+            { value: 'all', label: t('全部') },
+            { value: 'submission', label: t(DOC_LABEL.submission) },
+            { value: 'receipt', label: t(DOC_LABEL.receipt) },
+            { value: 'voucher', label: t(DOC_LABEL.voucher) },
+          ]}
+        />
+        <Input.Search
+          className="wb-search"
+          allowClear
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onSearch={applySearch}
+          placeholder={t('搜单号、客户、大架号、业务员、金额、账户')}
+        />
+      </div>
       <Spin spinning={loading}>
         {rows.length === 0 ? (
-          <Empty description={t(EMPTY_TEXT[box])} />
+          <Empty description={searching ? noHit : t(EMPTY_TEXT[box])} />
         ) : (
           <Space orientation="vertical" style={{ width: '100%' }} size={8}>
             {rows.map((it) => (
-              <ItemCard key={`${it.doc_type}-${it.doc_id}`} it={it} box={box} showSp={showSp} onOpen={() => void open(it)} />
+              <ItemCard key={`${it.doc_type}-${it.doc_id}`} it={it} box={box} showSp={showSp} re={re} onOpen={() => void open(it)} />
             ))}
           </Space>
         )}
@@ -313,7 +390,7 @@ export default function WorkbenchPage() {
       )}
       {total > 0 && (
         <div className="hint" style={{ marginTop: 8 }}>
-          {t('共 {n} 条', { n: total })}
+          {searching ? t('搜到 {n} 条', { n: total }) : t('共 {n} 条', { n: total })}
         </div>
       )}
 

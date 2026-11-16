@@ -8,7 +8,7 @@ import ReceiptImport from '../components/ReceiptImport'
 import SubmissionList from '../components/SubmissionList'
 import { RECEIPT_STATUS_LABEL, receiptStatus, useFlow } from '../lib/flow'
 import type { ReceiptStatus } from '../lib/flow'
-import { pickCol, textCol } from '../lib/colFilter'
+import { colsWidth, pickCol, textCol } from '../lib/colFilter'
 import { cleanSearch, money, todayAccra, usd } from '../lib/format'
 import { useAuth } from '../lib/auth'
 import { useT } from '../lib/i18n'
@@ -136,7 +136,13 @@ function ReceiptList() {
       render: (v: string) => <Tag color={BANK_COLOR[v]}>{t(v)}</Tag>,
       ...pickCol(rows, (r) => r.bank_status, t),
     },
-    { title: t('付款方 / 摘要'), dataIndex: 'payer_summary', ellipsis: true, ...textCol<Receipt>((r) => `${r.payer_summary ?? ''} ${r.bank_ref ?? ''} ${r.cheque_no ?? ''}`) },
+    {
+      title: t('付款方 / 摘要'),
+      dataIndex: 'payer_summary',
+      width: 220,
+      ellipsis: true,
+      ...textCol<Receipt>((r) => `${r.payer_summary ?? ''} ${r.bank_ref ?? ''} ${r.cheque_no ?? ''}`),
+    },
     {
       title: '',
       width: 36,
@@ -232,7 +238,7 @@ function ReceiptList() {
         loading={loading}
         columns={columns}
         dataSource={rows}
-        scroll={{ x: 1300 }}
+        scroll={{ x: colsWidth(columns) }}
         pagination={{ defaultPageSize: 50, showSizeChanger: true, showTotal: (n) => t('共 {n} 笔，已生效合计 {usd}', { n, usd: usd(total) }) }}
         rowClassName={() => 'clickable-row'}
         onRow={(r) => ({ onClick: () => setEditor({ open: true, id: r.id }) })}

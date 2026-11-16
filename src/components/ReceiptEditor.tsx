@@ -44,7 +44,6 @@ import type { Json } from '../lib/database.types'
 import AiFill from './AiFill'
 import CustomerSelect from './CustomerSelect'
 import PartsEditor from './PartsEditor'
-import ReportBox from './ReportBox'
 import VehicleFormModal from './VehicleFormModal'
 import VehicleSelect from './VehicleSelect'
 import Vouchers from './Vouchers'
@@ -150,7 +149,6 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
 
   const [currentId, setCurrentId] = useState<number | null>(null)
   const [receipt, setReceipt] = useState<Receipt | null>(null)
-  const [reportText, setReportText] = useState('')
   const [claims, setClaims] = useState<ClaimDraft[]>([])
   const [vehicles, setVehicles] = useState<Map<number, Vehicle>>(new Map())
   const [attachments, setAttachments] = useState<string[]>([])
@@ -204,7 +202,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   const othersTotal = partsTotal(others)
   /** 其他业务的客户 / 供应商候选：客户资料里的名字 */
   const cpOptions = useMemo(() => customers.map((c) => ({ value: c.name })), [customers])
-  // 到账自己的审批：录入后按录入时的审批流一级一级审，批完才算到账（才进余额、报表，才能报款）
+  // 到账自己的审批：录入后按录入时的审批流一级一级审，批完才算到账（才进余额、报表）
   const rStatus = receiptStatus(receipt?.status)
   const rStep = receipt?.step ?? null
   const rFlowItems = useMemo(() => parseFlow(receipt?.flow), [receipt?.flow])
@@ -259,10 +257,9 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     async (id: number): Promise<Receipt | null> => {
       setLoading(true)
       if (isStaff) void loadFill(id)
-      const [r, c, tx] = await Promise.all([
+      const [r, c] = await Promise.all([
         supabase.from('v_bank_receipts').select('*').eq('id', id).single(),
         supabase.from('v_receipt_claims').select('*').eq('receipt_id', id).order('id'),
-        supabase.rpc('receipt_report_text', { p_receipt_id: id }),
       ])
       if (r.error) {
         message.error(errorText(r.error))
@@ -286,7 +283,6 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
         setBankLine(null)
         setLineEntry(null)
       }
-      setReportText(tx.data ?? '')
       setAttachments(rec.attachments ?? [])
       rateTouched.current = true
       form.setFieldsValue({
@@ -342,7 +338,6 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     }
     setCurrentId(null)
     setReceipt(null)
-    setReportText('')
     setVehicles(new Map())
     form.resetFields()
     setBankLine(prefill?.line_id ? bankFacts({ ...prefill, line_date: prefill.receipt_date ?? null }) : null)
@@ -660,10 +655,10 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     const pending = receiptStatus(now?.status) === 'pending'
     const name = rflow.name(now?.step)
     if (opts?.accept) message.success(t('已采用并通过，{name} 填的拆分存到了这笔到账', { name: spName(opts.accept.salesperson_id) }))
-    else if (wasReview) message.success(pending ? t('已通过，生成了到账，等{name}审批', { name }) : t('已通过，生成了正式到账，报款文字在下面'))
+    else if (wasReview) message.success(pending ? t('已通过，生成了到账，等{name}审批', { name }) : t('已通过，生成了正式到账'))
     // 现在等的是“业务员本人确认”的一级（25）：提示写等业务员确认
     else if (pending && nowSp(now)) message.success(!currentId ? t('已保存，等业务员确认，全部批完才算到账') : wasApproved ? t('已保存，这笔到账回到审批中，等业务员确认') : t('已保存，等业务员确认'))
-    else if (!currentId) message.success(pending ? t('已保存，等{name}审批，批完才算到账', { name }) : t('已保存，报款文字在下面'))
+    else if (!currentId) message.success(pending ? t('已保存，等{name}审批，批完才算到账', { name }) : t('已保存'))
     else if (pending) message.success(wasApproved ? t('已保存，这笔到账回到审批中，等{name}审批', { name }) : t('已保存，等{name}审批', { name }))
     else message.success(t('已保存'))
     if (extra.length) message.info(t('流水里的{mods}也记进了银行日记账', { mods: [...new Set(extra.map((o) => t(o.module ?? '')))].join(listSep()) }))
@@ -718,7 +713,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   const withdraw = () => {
     modal.confirm({
       title: t('撤回这笔到账？'),
-      content: t('撤回后不算到账（不进余额和报表、不能报款）。改好后可以重新提交；不要了请管理员删掉。'),
+      content: t('撤回后不算到账（不进余额和报表）。改好后可以重新提交；不要了请管理员删掉。'),
       okText: t('撤回'),
       cancelText: t('返回'),
       onOk: async () => {
@@ -843,7 +838,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     })
   }
 
-  /** 把业务员填的拆分放进下面的表里（替换现有的行；同车同款项的行保留原来的 id 和报款备注），返回这些行 */
+  /** 把业务员填的拆分放进下面的表里（替换现有的行；同车同款项的行保留原来的 id 和备注），返回这些行 */
   const applyFill = (): ClaimDraft[] => {
     if (!fillReq) return claims
     const lines = parseClaims(fillReq.claims)
@@ -1087,7 +1082,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
       render: (_: unknown, r: ClaimDraft) => (rate > 0 && r.amount_orig ? usd(num(r.amount_orig) / rate) : ''),
     },
     {
-      title: t('报款备注（可空）'),
+      title: t('备注（可空）'),
       width: 180,
       render: (_: unknown, r: ClaimDraft) => (
         <Input
@@ -1355,7 +1350,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                   <div>
                     {stepIsSp
                       ? t('业务员确认后才到下一级审批，全部批完才算到账。不知道是谁的钱可以点“请业务员填写”，他填好、你采用就算他确认了。')
-                      : t('批完才算到账（才进余额和报表、才能报款）。改了日期、账户、金额或汇率会从第一级重新审批。')}
+                      : t('批完才算到账（才进余额和报表）。改了日期、账户、金额或汇率会从第一级重新审批。')}
                   </div>
                   {rateMissing && (
                     <div style={{ marginTop: 4 }}>
@@ -1588,7 +1583,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                 </Form.Item>
               </Col>
               <Col xs={24} md={16}>
-                <Form.Item name="note" label={t('内部备注（不进报款）')}>
+                <Form.Item name="note" label={t('内部备注')}>
                   <Input />
                 </Form.Item>
               </Col>
@@ -1718,20 +1713,6 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
           )}
         </Card>
 
-        {currentId && receipt && rStatus === 'approved' && (
-          <Card size="small" title={t('报款文字')}>
-            {dirty && !readOnly ? (
-              <Alert type="info" showIcon title={t('有改动还没保存，保存后这里会更新。')} />
-            ) : (
-              <ReportBox receipt={receipt} text={reportText} readOnly={readOnly} onChanged={() => void load(currentId).then(() => setChanged(true))} />
-            )}
-          </Card>
-        )}
-        {currentId && receipt && rStatus !== 'approved' && isStaff && (
-          <Card size="small" title={t('报款文字')}>
-            <span className="hint">{t('审批通过（生效）后才能报款。')}</span>
-          </Card>
-        )}
         {review && <ApprovalTrail docType="submission" docId={review.id} version={review.updated_at} />}
         {inFlow && <ApprovalTrail docType="receipt" docId={currentId} version={receipt?.updated_at} />}
         {isStaff && fillReq && <ApprovalTrail docType="submission" docId={fillReq.id} version={fillReq.updated_at} />}

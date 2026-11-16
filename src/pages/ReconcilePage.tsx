@@ -964,12 +964,6 @@ function MissingReceipts({ accountId, version, onOpen }: { accountId?: number; v
           { title: t('账户'), dataIndex: 'account_name', width: 210, ellipsis: true, ...pickCol(rows, (r) => r.account_name) },
           { title: t('金额'), width: 150, align: 'right', render: (_, r) => `${r.currency} ${money(r.amount_orig)}`, ...textCol<Receipt>((r) => `${r.currency} ${money(r.amount_orig)}`) },
           { title: t('付款方 / 摘要'), dataIndex: 'payer_summary', ellipsis: true, ...textCol<Receipt>((r) => r.payer_summary) },
-          {
-            title: t('报款'),
-            width: 90,
-            render: (_, r) => (r.is_reported ? <Tag color="green">{t('已报')}</Tag> : <Tag>{t('未报')}</Tag>),
-            ...pickCol(rows, (r) => (r.is_reported ? '已报' : '未报'), t),
-          },
         ]}
       />
     </div>

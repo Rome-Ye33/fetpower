@@ -14,7 +14,7 @@ import type { AppRole } from '../lib/supabase'
 
 /** 每个模块“可编辑”能做什么（只看 = 能打开看，这些都做不了） */
 const MODULE_HINT: Record<PermModule, string> = {
-  receipts: '录到账、拆分、审核业务员提交、请业务员填写、报款',
+  receipts: '录到账、拆分、审核业务员提交、请业务员填写',
   journal: '填银行流水（付款、其他收入、互转、一起填），设银行账户的期初余额',
   cash: '记现金支出、其他收入、账户互转，设现金账户的期初余额',
   cheques: '录支票、存票、退票、导入表格',

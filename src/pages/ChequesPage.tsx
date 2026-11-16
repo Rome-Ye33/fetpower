@@ -271,14 +271,13 @@ export default function ChequesPage() {
             ) : (
               (c.receipt_no ?? `#${c.receipt_id}`)
             )}
-            <div>{c.is_reported ? <Tag color="green">{t('已报')}</Tag> : <Tag color="blue">{t('未报')}</Tag>}</div>
           </span>
         ) : c.status === 'deposited' && c.days_deposited != null ? (
           <span className={c.days_deposited >= 3 ? 'text-warn' : 'hint'}>{t('存了 {n} 天', { n: c.days_deposited })}</span>
         ) : (
           ''
         ),
-      ...pickCol(rows, (c) => (c.receipt_id ? (c.is_reported ? '已报' : '未报') : ''), t),
+      ...textCol<Cheque>((c) => c.receipt_no ?? ''),
     },
     {
       title: t('最近沟通'),

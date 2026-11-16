@@ -121,20 +121,23 @@ export function useDocLabels() {
   )
 }
 
-/** 某一栏的查询（不含分页） */
-export function boxQuery(box: Box, type: DocType | 'all', count: 'exact' | undefined = undefined, head = false) {
+/** 某一栏的查询（不含分页）；search 是 searchFilter（wbSearch.ts）给的搜索条件 */
+export function boxQuery(box: Box, type: DocType | 'all', count: 'exact' | undefined = undefined, head = false, search: string | null = null) {
   let q = supabase.from('v_workbench').select('*', { count, head }).eq(BOX_COLUMN[box], true)
   if (type !== 'all') q = q.eq('doc_type', type)
+  if (search) q = q.or(search)
   return q
 }
 
-/** 五栏各有几件：一个查询取回标记列，在浏览器里数。
+/** 五栏各有几件：一个查询取回标记列，在浏览器里数（搜索时数搜到的）。
  *  原来每栏各发一个计数查询，打开一次工作台就有 6 个重查询同时压上去（2026-11-13 卡死的原因之一） */
-export async function boxCounts(type: DocType | 'all'): Promise<Record<Box, number>> {
+export async function boxCounts(type: DocType | 'all', search: string | null = null): Promise<Record<Box, number>> {
+  const inAny = BOXES.map((b) => `${BOX_COLUMN[b]}.eq.true`).join(',')
+  // 搜索时：在任一栏，并且对上搜索条件（合成一个 or 参数）
   let q = supabase
     .from('v_workbench')
     .select('in_todo,in_done,in_mine,in_ended,in_cc')
-    .or(BOXES.map((b) => `${BOX_COLUMN[b]}.eq.true`).join(','))
+    .or(search ? `and(or(${inAny}),${search})` : inAny)
     .limit(5000)
   if (type !== 'all') q = q.eq('doc_type', type)
   const { data } = await q

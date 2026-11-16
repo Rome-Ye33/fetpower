@@ -680,6 +680,33 @@ html[lang='en'] .logo-name {
   max-width: 100%;
   overflow-x: auto;
 }
+/* 种类筛选和搜索框一行，放不下（手机）时搜索框换到下一行占满 */
+.wb-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.wb-search {
+  flex: 0 1 380px;
+  min-width: 0;
+}
+@media (max-width: 575px) {
+  .wb-search {
+    flex: 1 1 100%;
+  }
+}
+/* 搜到的字 */
+.wb-hit {
+  background: #fff1b8;
+  color: inherit;
+  padding: 0;
+  border-radius: 2px;
+}
+.wb-nohit .ant-btn-link {
+  padding-inline: 4px;
+}
 
 /* 用户与权限：提成单审批流（业务员提交 → 管理员定的几级 → 财务发放），放不下时换行，窄屏时一行一级 */
 .flow-row {

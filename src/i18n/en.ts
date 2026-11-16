@@ -1469,6 +1469,11 @@ const UI: Record<string, string> = {
   "审批记录": "Approval history",
   "系统": "System",
   "原因：{note}": "Reason: {note}",
+  "搜单号、客户、大架号、业务员、金额、账户": "Search no., customer, VIN, salesperson, amount, account",
+  "这一栏没有搜到“{q}”": "Nothing in this tab matches “{q}”",
+  "没有搜到“{q}”": "Nothing matches “{q}”",
+  "在这几栏里有：": "Found in:",
+  "搜到 {n} 条": "{n} found",
 
   // 用户与权限：提成单审批流
   "提成单审批流": "Commission voucher approval flow",

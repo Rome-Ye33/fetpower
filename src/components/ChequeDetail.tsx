@@ -206,7 +206,6 @@ export default function ChequeDetail({ open, cheque, onClose, onChanged, onEdit,
               {t('支票')} {c.cheque_no}
             </span>
             <Tag color={CHEQUE_STATUS_COLOR[status]}>{t(CHEQUE_STATUS_LABEL[status])}</Tag>
-            {status === 'cleared' && (c.is_reported ? <Tag color="green">{t('已报回款')}</Tag> : <Tag color="blue">{t('未报回款')}</Tag>)}
           </Space>
         ) : (
           t('支票')
@@ -279,7 +278,7 @@ export default function ChequeDetail({ open, cheque, onClose, onChanged, onEdit,
               <Descriptions.Item label={t('到账')} span={2}>
                 {canView('receipts') ? <a onClick={() => onOpenReceipt(c.receipt_id!)}>{c.receipt_no}</a> : c.receipt_no}
                 <span className="hint" style={{ marginInlineStart: 8 }}>
-                  {c.receipt_date} · {rflow.stageLabel(c.receipt_status, null)} · {c.is_reported ? t('已报回款') : t('还没报回款，到到账录入里报')}
+                  {c.receipt_date} · {rflow.stageLabel(c.receipt_status, null)}
                 </span>
               </Descriptions.Item>
             )}

@@ -11,7 +11,7 @@ import type { ReceiptPrefill } from '../components/ReceiptEditor'
 import { useAuth } from '../lib/auth'
 import { CHEQUE_ALERT_LABEL, CHEQUE_ALERTS, CHEQUE_STATUS_COLOR, CHEQUE_STATUS_LABEL, CHEQUE_STATUSES, chequeStatus, chequeVehicleIds, chequeVins, inAlert, notifyChequesChanged } from '../lib/cheques'
 import type { Cheque, ChequeAlert, ChequeStatus } from '../lib/cheques'
-import { pickCol, textCol } from '../lib/colFilter'
+import { colsWidth, pickCol, textCol } from '../lib/colFilter'
 import { errorText } from '../lib/errors'
 import { cleanSearch, money, shortDate, usd } from '../lib/format'
 import { useT } from '../lib/i18n'
@@ -225,7 +225,7 @@ export default function ChequesPage() {
       },
       ...textCol<Cheque>((c) => `${c.vins ?? c.vin ?? ''} ${c.models ?? c.model ?? ''}`),
     },
-    { title: t('业务员'), dataIndex: 'salesperson_name', width: 110, ellipsis: true, ...pickCol(rows, (c) => c.salesperson_name) },
+    { title: t('业务员'), dataIndex: 'salesperson_name', width: 124, ellipsis: true, ...pickCol(rows, (c) => c.salesperson_name) },
     { title: t('用途'), dataIndex: 'purpose', width: 90, render: (v: string) => t(v), ...pickCol(rows, (c) => c.purpose, t) },
     {
       title: t('金额'),
@@ -281,6 +281,7 @@ export default function ChequesPage() {
     },
     {
       title: t('最近沟通'),
+      width: 220,
       ellipsis: true,
       render: (_, c) =>
         c.last_note ? (
@@ -371,7 +372,7 @@ export default function ChequesPage() {
         loading={loading}
         columns={columns}
         dataSource={shown}
-        scroll={{ x: 1600 }}
+        scroll={{ x: colsWidth(columns, chEdit ? 40 : 0) }}
         pagination={{ defaultPageSize: 50, showSizeChanger: true, showTotal: (n) => t('共 {n} 张支票', { n }) }}
         rowClassName={() => 'clickable-row'}
         onRow={(c) => ({ onClick: (e) => !(e.target as HTMLElement).closest('.ant-table-selection-column') && setDetailId(c.id) })}

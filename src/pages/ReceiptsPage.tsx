@@ -11,7 +11,7 @@ import type { ReceiptStatus } from '../lib/flow'
 import { pickCol, textCol } from '../lib/colFilter'
 import { cleanSearch, money, todayAccra, usd } from '../lib/format'
 import { useAuth } from '../lib/auth'
-import { tr, useT } from '../lib/i18n'
+import { useT } from '../lib/i18n'
 import { accountOptions, useRefData } from '../lib/refdata'
 import { useSubmissionCount } from '../lib/submissions'
 import { supabase } from '../lib/supabase'
@@ -20,12 +20,6 @@ import type { Receipt } from '../lib/supabase'
 
 export const CLAIM_COLOR: Record<string, string> = { 未认领: 'red', 部分认领: 'orange', 已认领: 'green' }
 export const BANK_COLOR: Record<string, string> = { 已核对: 'green', 银行查不到: 'red', 待核对: 'default', 无需核对: 'default' }
-
-export function reportTag(r: Receipt) {
-  if (r.needs_correction) return <Tag color="orange">{tr('需发修改')}</Tag>
-  if (r.is_reported) return <Tag color="green">{tr('已报 {date}', { date: r.report_date?.slice(5) ?? '' })}</Tag>
-  return <Tag color="blue">{tr('未报')}</Tag>
-}
 
 function ReceiptList() {
   const t = useT()
@@ -39,7 +33,6 @@ function ReceiptList() {
   const [accountId, setAccountId] = useState<number | undefined>()
   const [approval, setApproval] = useState<ReceiptStatus | undefined>()
   const [claimStatus, setClaimStatus] = useState<string | undefined>()
-  const [reportStatus, setReportStatus] = useState<string | undefined>()
   const [bankStatus, setBankStatus] = useState<string | undefined>()
   const [q, setQ] = useState('')
   const [editor, setEditor] = useState<{ open: boolean; id: number | null }>({ open: false, id: null })
@@ -76,16 +69,13 @@ function ReceiptList() {
     if (claimStatus === '大架号未锁定') query = query.in('id', um.size ? [...um.keys()] : [0])
     else if (claimStatus) query = query.eq('claim_status', claimStatus)
     if (bankStatus) query = query.eq('bank_status', bankStatus)
-    if (reportStatus === '未报') query = query.eq('is_reported', false)
-    if (reportStatus === '已报') query = query.eq('is_reported', true)
-    if (reportStatus === '需发修改') query = query.eq('needs_correction', true)
     const s = cleanSearch(q)
     if (s) query = query.or(`receipt_no.ilike.%${s}%,payer_summary.ilike.%${s}%,note.ilike.%${s}%,bank_ref.ilike.%${s}%,cheque_no.ilike.%${s}%`)
     const { data } = await query
     setRows(data ?? [])
     setShown(null)
     setLoading(false)
-  }, [range, accountId, approval, claimStatus, reportStatus, bankStatus, q])
+  }, [range, accountId, approval, claimStatus, bankStatus, q])
 
   useEffect(() => {
     void load()
@@ -139,7 +129,6 @@ function ReceiptList() {
       ),
       ...pickCol(rows, (r) => r.claim_status, t),
     },
-    { title: t('报款'), width: 100, render: (_, r) => reportTag(r), ...pickCol(rows, (r) => (r.needs_correction ? '需发修改' : r.is_reported ? '已报' : '未报'), t) },
     {
       title: t('银行核对'),
       dataIndex: 'bank_status',
@@ -211,7 +200,6 @@ function ReceiptList() {
           options={opts(['未认领', '部分认领', '已认领', '大架号未锁定'])}
           className="claim-filter"
         />
-        <Select allowClear placeholder={t('报款状态')} style={{ width: 120 }} value={reportStatus} onChange={setReportStatus} options={opts(['未报', '已报', '需发修改'])} />
         <Select
           allowClear
           placeholder={t('银行核对')}

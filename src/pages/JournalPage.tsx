@@ -9,6 +9,7 @@ import {
   ReloadOutlined,
   RightOutlined,
   SettingOutlined,
+  UploadOutlined,
 } from '@ant-design/icons'
 import { Alert, Button, Card, Checkbox, Col, DatePicker, Input, Row, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -17,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import CashEntryEditor from '../components/CashEntryEditor'
 import type { CashEntryPrefill } from '../components/CashEntryEditor'
+import JournalImport from '../components/JournalImport'
 import LogLines from '../components/LogLines'
 import OpeningEditor from '../components/OpeningEditor'
 import PairEntryModal from '../components/PairEntryModal'
@@ -81,6 +83,7 @@ export default function JournalPage({ scope }: { scope: JournalScope }) {
   const [editor, setEditor] = useState<Editor>({ open: false, id: null, prefill: null })
   const [receipt, setReceipt] = useState<{ open: boolean; id: number | null; prefill: ReceiptPrefill | null }>({ open: false, id: null, prefill: null })
   const [openingOpen, setOpeningOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [version, setVersion] = useState(0)
 
   // 别处（录到账、填流水、改期初）改了就重读
@@ -129,6 +132,11 @@ export default function JournalPage({ scope }: { scope: JournalScope }) {
           {jEdit && (
             <Button icon={<SettingOutlined />} onClick={() => setOpeningOpen(true)}>
               {t('期初余额')}
+            </Button>
+          )}
+          {jEdit && (
+            <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
+              {t('批量导入')}
             </Button>
           )}
           {jEdit && (
@@ -219,6 +227,14 @@ export default function JournalPage({ scope }: { scope: JournalScope }) {
         scope={scope}
         onClose={(changed) => {
           setOpeningOpen(false)
+          if (changed) setVersion((x) => x + 1)
+        }}
+      />
+      <JournalImport
+        open={importOpen}
+        scope={scope}
+        onClose={(changed) => {
+          setImportOpen(false)
           if (changed) setVersion((x) => x + 1)
         }}
       />

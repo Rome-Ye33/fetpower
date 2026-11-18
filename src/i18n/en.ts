@@ -1651,10 +1651,11 @@ const UI: Record<string, string> = {
   "已删除 {n} 张支票": "{n} cheques deleted",
   // 批量修改支票（按序号选一叠）
   "修改选中 {n} 张": "Edit {n} selected",
+  "改这一批（{n} 张）": "Edit this batch ({n})",
   "批量修改 {n} 张支票": "Edit {n} cheques together",
   "勾上的项才改，没勾的每张票保留自己原来的。": "Only ticked fields are changed; every other field keeps each cheque's own value.",
-  "按序号改一叠：先在台账「序号」那一列搜合同序号，再点表头的勾全选，然后到这里改。":
-    "To edit one contract's stack: search the contract no. in the Seq. column, tick the header checkbox to select them all, then come here.",
+  "按序号改一批：先在台账「序号」那一列搜合同序号，再点表头的勾全选，然后到这里改。也可以打开其中一张，点右上角「改这一批」。":
+    "To edit one batch: search the contract no. in the Seq. column, tick the header checkbox to select them all, then come here. Or open any one of them and click Edit this batch, top right.",
   "先勾要改的项": "Tick what to change first",
   "这几张票不是同一个客户的，要改车请连客户一起勾上": "These cheques are not all for one customer; to change the vehicles, tick Customer as well",
   "请选到期日期": "Choose the due date",

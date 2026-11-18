@@ -360,7 +360,7 @@ export default function ChequeBulkEdit({ open, cheques, onClose }: { open: boole
         showIcon
         style={{ marginBottom: 12 }}
         title={t('勾上的项才改，没勾的每张票保留自己原来的。')}
-        description={t('按序号改一叠：先在台账「序号」那一列搜合同序号，再点表头的勾全选，然后到这里改。')}
+        description={t('按序号改一批：先在台账「序号」那一列搜合同序号，再点表头的勾全选，然后到这里改。也可以打开其中一张，点右上角「改这一批」。')}
       />
       <Table
         rowKey="key"

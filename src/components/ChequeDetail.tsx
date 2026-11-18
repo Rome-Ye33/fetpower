@@ -24,6 +24,10 @@ type Props = {
   /** 改了（状态、内容、删除）以后列表要重新读 */
   onChanged: () => void
   onEdit: (c: Cheque) => void
+  /** 「改这一批」：把同一个合同序号的几张一起改（上面那一排，「修改」左边） */
+  onBulkEdit?: (c: Cheque) => void
+  /** 这一批一共几张（同客户、同合同序号）；少于 2 张就不显示「改这一批」 */
+  stackCount?: number
   /** 生成到账：打开新建到账页，带着账户、日期、金额、支票号、车 */
   onCreateReceipt: (c: Cheque) => void
   /** 点到账编号：打开那笔到账 */
@@ -34,7 +38,7 @@ type Dialog = 'plan' | 'deposit' | 'bounce' | 'cancel' | 'reopen' | 'link' | 'un
 
 type DialogValues = { note?: string; plan_date?: dayjs.Dayjs | null; deposit_date?: dayjs.Dayjs | null; deposit_account_id?: number; amount?: number | null; receipt_id?: number }
 
-export default function ChequeDetail({ open, cheque, onClose, onChanged, onEdit, onCreateReceipt, onOpenReceipt }: Props) {
+export default function ChequeDetail({ open, cheque, onClose, onChanged, onEdit, onBulkEdit, onCreateReceipt, onOpenReceipt, stackCount = 0 }: Props) {
   const t = useT()
   const { message, modal } = App.useApp()
   const { canEdit, canView } = useAuth()
@@ -214,6 +218,12 @@ export default function ChequeDetail({ open, cheque, onClose, onChanged, onEdit,
       extra={
         c && chEdit ? (
           <Space wrap>
+            {/* 这张票属于一批分期票时，从这里直接把整批调出来一起改（期数写错了最常用） */}
+            {onBulkEdit && c.contract_no && stackCount > 1 && (
+              <Button size="small" className="cheque-stack-btn" onClick={() => onBulkEdit(c)}>
+                {t('改这一批（{n} 张）', { n: stackCount })}
+              </Button>
+            )}
             <Button size="small" onClick={() => onEdit(c)}>
               {t('修改')}
             </Button>

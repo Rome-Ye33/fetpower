@@ -48,8 +48,8 @@ export default function ChequesPage() {
   const [receipt, setReceipt] = useState<{ open: boolean; id: number | null; prefill: ReceiptPrefill | null }>({ open: false, id: null, prefill: null })
   const [selected, setSelected] = useState<number[]>([])
   const [deleting, setDeleting] = useState(false)
-  /** 批量修改（按序号选出一叠，一次改几项） */
-  const [bulkOpen, setBulkOpen] = useState(false)
+  /** 批量修改要改的那几张：勾中的，或者详情里「改这一批」给的整批；null = 没开 */
+  const [bulk, setBulk] = useState<Cheque[] | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -122,6 +122,9 @@ export default function ChequesPage() {
 
   // 批量删除：按列表上看得见的选中项算；已到账的不删（数据库的删除策略也拦着）
   const chosen = shown.filter((c) => selected.includes(c.id as number))
+  /** 详情里的「改这一批」：同一个客户、同一个合同序号的所有支票（不看当前的筛选，整批都要） */
+  const stackOf = (c: Cheque) =>
+    c.contract_no ? rows.filter((x) => x.contract_no === c.contract_no && x.customer_id === c.customer_id) : [c]
   const removeSelected = async () => {
     const kept = chosen.filter((c) => c.status === 'cleared')
     const ids = chosen.filter((c) => c.status !== 'cleared').map((c) => c.id as number)
@@ -350,7 +353,7 @@ export default function ChequesPage() {
         <Input.Search allowClear placeholder={t('支票号、客户、户名、大架号、合同序号')} style={{ width: 240 }} onSearch={setQ} />
         <Button icon={<ReloadOutlined />} onClick={() => void load()} />
         {chEdit && chosen.length > 0 && (
-          <Button icon={<EditOutlined />} onClick={() => setBulkOpen(true)} className="cheque-bulk-btn">
+          <Button icon={<EditOutlined />} onClick={() => setBulk(chosen)} className="cheque-bulk-btn">
             {t('修改选中 {n} 张', { n: chosen.length })}
           </Button>
         )}
@@ -402,10 +405,10 @@ export default function ChequesPage() {
         }
       />
       <ChequeBulkEdit
-        open={bulkOpen}
-        cheques={chosen}
+        open={bulk != null}
+        cheques={bulk ?? []}
         onClose={(changed) => {
-          setBulkOpen(false)
+          setBulk(null)
           if (changed) {
             setSelected([])
             void load()
@@ -426,6 +429,8 @@ export default function ChequesPage() {
         onClose={() => setDetailId(null)}
         onChanged={() => void load()}
         onEdit={(c) => setEditor({ open: true, cheque: c })}
+        onBulkEdit={(c) => setBulk(stackOf(c))}
+        stackCount={detail ? stackOf(detail).length : 0}
         onCreateReceipt={createReceipt}
         onOpenReceipt={(id) => setReceipt({ open: true, id, prefill: null })}
       />

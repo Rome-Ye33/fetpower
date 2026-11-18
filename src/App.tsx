@@ -75,6 +75,8 @@ export default function App() {
   const uid = auth.session?.user.id ?? null
   const isSales = auth.role === 'sales'
   const { canView } = auth
+  // 业务员里「全部支票」的那种（数据库 44）：菜单写「支票管理」，不是「我的支票」
+  const allCheques = auth.perm('cheques') === 'all'
   // 待审核的到账提交：能改“到账录入”的人才审得了，只看的不提醒
   const pending = useSubmissionCount('pending', auth.canEdit('receipts'))
   const rejected = useSubmissionCount('rejected', isSales)
@@ -160,8 +162,10 @@ export default function App() {
         { key: '/submit', icon: <SendOutlined />, label: withCount(t('提交到账'), rejected, unlocked) },
         { key: '/vehicles', icon: <CarOutlined />, label: t('我的车辆') },
         { key: '/commission', icon: <FileDoneOutlined />, label: withCount(t('提成申请单'), voucherTodo) },
-        // 管理员在「用户与权限 → 模块权限」给他开过才有；只看自己名下的票
-        ...(canView('cheques') ? [{ key: '/cheques', icon: <CreditCardOutlined />, label: t('我的支票') }] : []),
+        // 管理员在「用户与权限 → 模块权限」给他开过才有：只看自己名下的票，或者全部的票（这时就叫「支票管理」）
+        ...(canView('cheques')
+          ? [{ key: '/cheques', icon: <CreditCardOutlined />, label: allCheques ? t('支票管理') : t('我的支票') }]
+          : []),
       ]
 
   const selected = items.find((i) => location.pathname.startsWith(i.key))?.key ?? home

@@ -503,7 +503,7 @@ export default function UsersPage() {
         ]}
       />
       <div className="hint" style={{ marginBottom: 24 }}>
-        {t('蓝色的能改，灰色的只能看，没列出来的看不到（菜单里没有）。管理员全部能改。业务员默认只有工作台、提交到账、我的车辆、提成申请单，点“设置”可以再给他开「我的支票」（只看自己名下的）。')}
+        {t('蓝色的能改，灰色的只能看，没列出来的看不到（菜单里没有）。管理员全部能改。业务员默认只有工作台、提交到账、我的车辆、提成申请单，点“设置”可以再给他开支票：只看自己名下的，或者看公司全部的票（都只能看）。')}
       </div>
       <Space wrap style={{ marginBottom: 8 }}>
         <Typography.Title level={5} style={{ margin: 0 }}>

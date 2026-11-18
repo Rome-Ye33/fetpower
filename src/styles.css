@@ -499,6 +499,38 @@ html[lang='en'] .logo-name {
   }
 }
 
+/* 审批记录里“已修改”的那一行（42）：改了哪几项，改前 → 改后 */
+.edit-changes {
+  margin-top: 2px;
+  font-size: 13px;
+}
+.edit-change + .edit-change {
+  margin-top: 2px;
+}
+.edit-label {
+  color: #595959;
+}
+.edit-before {
+  color: #8a8f98;
+  text-decoration: line-through;
+}
+.edit-after {
+  color: #0f172a;
+  font-weight: 500;
+}
+.edit-arrow {
+  color: #8a8f98;
+}
+.edit-removed {
+  color: #8a8f98;
+  padding-left: 12px;
+  text-decoration: line-through;
+}
+.edit-added {
+  color: #237804;
+  padding-left: 12px;
+}
+
 /* 到账拆分：大架号未锁定，先记到客户名下 */
 .unlocked-box {
   margin-top: 4px;
@@ -541,7 +573,7 @@ html[lang='en'] .logo-name {
   word-break: break-word;
 }
 .cv-table th {
-  background: #f2f2f2;
+  background: #fff;
   font-weight: 600;
   text-align: left;
   font-size: 10px;
@@ -581,7 +613,7 @@ html[lang='en'] .logo-name {
   padding: 0 0 4px !important;
 }
 .cv-table td.cv-section {
-  background: #dde4f0;
+  background: #fff;
   font-weight: 700;
 }
 .cv-vin {
@@ -592,14 +624,14 @@ html[lang='en'] .logo-name {
   font-size: 13px;
 }
 .cv-warn {
-  color: #d4380d;
+  font-weight: 700;
 }
 .cv-stamp {
   display: inline-block;
   margin-right: 12px;
   padding: 1px 6px;
-  border: 2px solid #d4380d;
-  color: #d4380d;
+  border: 1px solid #000;
+  color: #000;
   font-weight: 700;
 }
 .cv-sign {
@@ -624,7 +656,6 @@ html[lang='en'] .logo-name {
 .cv-sign-note {
   font-size: 9px;
   margin-top: 6px;
-  color: #555;
 }
 .cv-paid {
   margin-top: 12px;
@@ -639,7 +670,6 @@ html[lang='en'] .logo-name {
   padding: 2px 4px;
 }
 .cv-trail-en {
-  color: #444;
   font-size: 9px;
 }
 .cv-trail tr {
@@ -661,11 +691,6 @@ html[lang='en'] .logo-name {
   .print-page {
     padding: 0;
   }
-  .cv-table th,
-  .cv-table td.cv-section {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
 }
 
 /* 工作台 */
@@ -686,6 +711,33 @@ html[lang='en'] .logo-name {
 .wb-type {
   max-width: 100%;
   overflow-x: auto;
+}
+/* 种类筛选和搜索框一行，放不下（手机）时搜索框换到下一行占满 */
+.wb-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.wb-search {
+  flex: 0 1 380px;
+  min-width: 0;
+}
+@media (max-width: 575px) {
+  .wb-search {
+    flex: 1 1 100%;
+  }
+}
+/* 搜到的字 */
+.wb-hit {
+  background: #fff1b8;
+  color: inherit;
+  padding: 0;
+  border-radius: 2px;
+}
+.wb-nohit .ant-btn-link {
+  padding-inline: 4px;
 }
 
 /* 用户与权限：提成单审批流（业务员提交 → 管理员定的几级 → 财务发放），放不下时换行，窄屏时一行一级 */
@@ -854,4 +906,515 @@ html[lang='en'] .logo-name {
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
+}
+
+/* 批量导入到账：对应列分“到账 / 拆分到车”两段；预览表的状态一格里提示一行一条，拆分一车一行，不导的划掉 */
+.receipt-import .ri-part {
+  margin: 14px 0 6px;
+  font-weight: 600;
+  color: #4a5160;
+}
+.receipt-import .ri-status > div {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 2px;
+}
+.receipt-import .ri-claim {
+  line-height: 1.6;
+}
+.receipt-import .ri-claim-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.receipt-import .ri-claim + .ri-claim {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed #e3e6eb;
+}
+.receipt-import .ri-amt {
+  white-space: nowrap;
+}
+.receipt-import .ri-dropped {
+  color: #a0a4ab;
+  text-decoration: line-through;
+}
+.receipt-import .ri-dropped .ant-tag {
+  text-decoration: none;
+}
+
+/* 打印页“缩到一页”：里面那层用 transform 缩小（不占位置），外面这一层按缩完的高度裁，分页才按缩完的算。
+   屏幕上和打印时单子的宽度可能不一样（窗口窄时会被挤高），所以两个高度分开给。 */
+.cv-fit-on {
+  height: var(--fit-h);
+  overflow: hidden;
+}
+@media print {
+  .cv-fit-on {
+    height: var(--fit-h-print);
+  }
+}
+
+/* ---------- 银行现金日记账 ---------- */
+.balance-cards {
+  margin-bottom: 12px;
+}
+.balance-big {
+  margin: 2px 0;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 600;
+}
+.check-counts {
+  margin-top: 6px;
+}
+.journal-summary .row-group > td {
+  background: #eef2f8 !important;
+  border-top: 8px solid #fff;
+}
+.group-title {
+  color: #1e3a8a;
+  font-weight: 600;
+}
+.journal-summary .row-total > td,
+.journal-ledger .ant-table-summary .row-total > td {
+  background: #f8fafc;
+}
+.bal-ok,
+.bal-todo {
+  color: #237804;
+}
+.bal-broken {
+  color: #cf1322;
+}
+.text-orange {
+  color: #d46b08;
+}
+.tag-mini {
+  margin-inline-start: 6px;
+  font-size: 11px;
+  line-height: 18px;
+}
+.journal-note {
+  margin-top: 10px;
+  font-size: 12px;
+}
+.switch-label {
+  white-space: nowrap;
+}
+.ledger-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: #f6f8fb;
+  border: 1px solid #e9edf3;
+  border-radius: 8px;
+}
+.ledger-acct {
+  font-weight: 600;
+  color: #0f172a;
+}
+.doc-no {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+}
+/* 长的摘要、客户名最多两行，悬停看全文 */
+.clamp2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.pre-line {
+  white-space: pre-line;
+}
+.peer-acct {
+  color: #531dab;
+}
+.journal-ledger .row-day > td {
+  background: #fafafa;
+  color: #64748b;
+  font-size: 12px;
+}
+.journal-ledger .row-opening > td {
+  background: #f0f5ff;
+}
+.day-label {
+  color: #64748b;
+}
+.journal-ledger .row-todo > td {
+  background: #fffaf0;
+}
+/* 等流水：银行账户先记的、流水里还没有的，金额灰色、不算余额 */
+.journal-ledger .row-waiting > td {
+  background: #f8fafc;
+}
+.waiting-amt {
+  color: #8a8f98;
+}
+.todo-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fill-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tag-under {
+  margin-top: 2px;
+}
+/* 业务模块那一栏窄：英文的长名字（Awaiting statement、Purchases - parts）在格子里折行，不盖住旁边一栏 */
+.journal-ledger .tag-under {
+  max-width: 100%;
+  white-space: normal;
+}
+/* 收支录入 */
+.entry-kind {
+  margin-bottom: 14px;
+}
+.entry-tip {
+  margin-bottom: 12px;
+}
+.entry-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.transfer-box {
+  margin-bottom: 16px;
+  padding: 12px 14px 0;
+  background: #f8fafc;
+  border: 1px solid #eef2f6;
+  border-radius: 8px;
+}
+.transfer-arrow {
+  padding-top: 30px;
+  line-height: 32px;
+  text-align: center;
+  font-size: 22px;
+  color: #94a3b8;
+}
+.transfer-note {
+  margin: -8px 0 12px;
+  font-size: 12px;
+}
+.auto-module-box {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+.auto-module {
+  margin-inline-end: 8px;
+}
+.transfer-preview {
+  margin: 0;
+  padding: 8px 12px;
+  background: #f9f0ff;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.entry-meta {
+  margin-top: 8px;
+}
+
+/* ---------- 日记账：分工、修改记录（36） ---------- */
+.duty-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #eef2f6;
+  border-radius: 8px;
+}
+.duty-box > div {
+  flex: 1 1 320px;
+}
+.entry-log {
+  margin-top: 6px;
+}
+.entry-log .ant-collapse-header {
+  padding-inline-start: 0 !important;
+  color: #475569 !important;
+}
+.log-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.log-group {
+  padding: 6px 0;
+  border-bottom: 1px dashed #e9edf3;
+}
+.log-group:last-child {
+  border-bottom: 0;
+}
+.log-head {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: #64748b;
+}
+.log-head b {
+  color: #334155;
+  font-weight: 600;
+}
+.log-line {
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.journal-log-table .log-line + .log-line {
+  margin-top: 2px;
+}
+/* 一次操作的话很多时这一行很高：时间、操作人放在顶上，不要跑到正中间 */
+.journal-log-table .ant-table-tbody > tr > td {
+  vertical-align: top;
+}
+.log-more.ant-btn {
+  height: auto;
+  padding: 2px 0 0;
+}
+.duty-note {
+  margin-bottom: 8px;
+}
+
+/* ---------- 一笔里分几种业务（37） ---------- */
+.parts-toggle {
+  margin: -6px 0 12px;
+  padding-inline-start: 0;
+}
+.parts-wrap {
+  margin-bottom: 16px;
+  padding: 10px 12px 8px;
+  background: #f8fafc;
+  border: 1px solid #eef2f6;
+  border-radius: 8px;
+}
+.parts-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 8px;
+}
+.parts-title .hint {
+  font-size: 12px;
+}
+.parts-title .ant-btn {
+  margin-inline-start: auto;
+}
+.parts-head {
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.parts-row {
+  margin-bottom: 8px;
+}
+.parts-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+}
+.parts-car-tip {
+  margin-top: 10px;
+}
+@media (max-width: 575px) {
+  .parts-head {
+    display: none;
+  }
+  .parts-row {
+    padding-bottom: 4px;
+    border-bottom: 1px dashed #e2e8f0;
+  }
+  .parts-row > .ant-col {
+    margin-bottom: 6px;
+  }
+}
+/* 日记账里一行分了几种业务：摘要下面点开看每一种 */
+.parts-link.ant-btn {
+  height: auto;
+  padding: 0;
+  font-size: 12px;
+}
+.parts-list {
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: #f8fafc;
+  border: 1px solid #eef2f6;
+  border-radius: 6px;
+}
+.parts-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1px 6px;
+  padding: 4px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.parts-item + .parts-item {
+  border-top: 1px dashed #e9edf3;
+}
+.parts-item.clickable {
+  cursor: pointer;
+}
+.parts-item.clickable:hover {
+  background: #eef4ff;
+}
+.parts-item .ant-tag {
+  margin-inline-end: 0;
+  font-size: 11px;
+  line-height: 18px;
+}
+.parts-who {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* 第二行小字：摘要、大架号、单号 */
+.parts-what {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 2 / 4;
+  gap: 0 8px;
+  min-width: 0;
+  color: #64748b;
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.parts-vin {
+  color: #1d4ed8;
+}
+.parts-item-amt {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.parts-left {
+  font-style: italic;
+}
+/* 到账录入：这条流水里还有不是回款的钱 */
+.others-card .ant-card-head {
+  background: #f6ffed;
+}
+
+/* 表格里整段显示的备注：放不下就换行，不截断 */
+.ant-table-cell.wrap-note {
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* ---------- 维护模式（39）：被挡在外面的人看到的整页提示，和窄屏登录页一样上面一条深蓝 ---------- */
+.maint-wrap {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 0 16px 32px;
+  background: linear-gradient(180deg, #0f1d40 0, #17337d 220px, #f3f5f9 220px);
+}
+.maint-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 20px 0 28px;
+}
+.maint-card {
+  box-sizing: border-box;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 32px 28px 22px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  text-align: center;
+}
+.maint-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: #fff4e5;
+  color: #d46b08;
+  font-size: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.maint-title {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 600;
+}
+.maint-sub.ant-typography {
+  margin-bottom: 16px;
+}
+.maint-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  text-align: left;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 8px;
+}
+.maint-note-label {
+  margin-bottom: 2px;
+  color: #ad6800;
+  font-size: 12px;
+}
+.maint-note-text,
+.maint-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.maint-since {
+  margin-bottom: 18px;
+}
+.maint-actions {
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.maint-who {
+  word-break: break-all;
+}
+/* 登录页、管理员每页顶上、用户与权限里的开关 */
+.maint-login-alert {
+  margin-bottom: 12px;
+}
+.maint-banner {
+  margin-bottom: 12px;
+  border-radius: 10px;
+}
+.maint-card-admin.is-on {
+  border-color: #ffd591;
+  background: #fffaf0;
+}
+.maint-card-note {
+  margin-top: 6px;
+}
+.maint-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+.maint-list li {
+  margin-bottom: 4px;
+}
+/* 说明框下面的字数和弹窗底下的按钮隔开一点 */
+.maint-note-input {
+  margin-bottom: 18px;
 }

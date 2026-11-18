@@ -58,6 +58,7 @@ export type Database = {
           actor: string | null
           actor_name: string | null
           at: string
+          changes: Json | null
           doc_id: number
           doc_type: string
           from_status: string | null
@@ -71,6 +72,7 @@ export type Database = {
           actor?: string | null
           actor_name?: string | null
           at?: string
+          changes?: Json | null
           doc_id: number
           doc_type: string
           from_status?: string | null
@@ -84,6 +86,7 @@ export type Database = {
           actor?: string | null
           actor_name?: string | null
           at?: string
+          changes?: Json | null
           doc_id?: number
           doc_type?: string
           from_status?: string | null
@@ -140,6 +143,8 @@ export type Database = {
           last4: string | null
           list_name: string | null
           masked_hints: string[]
+          opening_balance: number | null
+          opening_date: string | null
           short_name: string
         }
         Insert: {
@@ -154,6 +159,8 @@ export type Database = {
           last4?: string | null
           list_name?: string | null
           masked_hints?: string[]
+          opening_balance?: number | null
+          opening_date?: string | null
           short_name: string
         }
         Update: {
@@ -168,6 +175,8 @@ export type Database = {
           last4?: string | null
           list_name?: string | null
           masked_hints?: string[]
+          opening_balance?: number | null
+          opening_date?: string | null
           short_name?: string
         }
         Relationships: []
@@ -218,7 +227,7 @@ export type Database = {
           created_by: string | null
           currency: string
           flow: Json
-          fx_rate: number
+          fx_rate: number | null
           id: number
           import_batch_id: number | null
           import_hash: string | null
@@ -251,7 +260,7 @@ export type Database = {
           created_by?: string | null
           currency: string
           flow?: Json
-          fx_rate: number
+          fx_rate?: number | null
           id?: never
           import_batch_id?: number | null
           import_hash?: string | null
@@ -284,7 +293,7 @@ export type Database = {
           created_by?: string | null
           currency?: string
           flow?: Json
-          fx_rate?: number
+          fx_rate?: number | null
           id?: never
           import_batch_id?: number | null
           import_hash?: string | null
@@ -326,14 +335,17 @@ export type Database = {
         Row: {
           account_id: number
           amount_orig: number
+          balance: number | null
           bank_ref: string | null
           batch_id: number
           cheque_no: string | null
           created_at: string
+          entry_id: number | null
           id: number
           ignored: boolean
           line_date: string
           line_hash: string
+          line_seq: number | null
           match_type: string | null
           note: string | null
           payer_summary: string | null
@@ -342,14 +354,17 @@ export type Database = {
         Insert: {
           account_id: number
           amount_orig: number
+          balance?: number | null
           bank_ref?: string | null
           batch_id: number
           cheque_no?: string | null
           created_at?: string
+          entry_id?: number | null
           id?: never
           ignored?: boolean
           line_date: string
           line_hash: string
+          line_seq?: number | null
           match_type?: string | null
           note?: string | null
           payer_summary?: string | null
@@ -358,14 +373,17 @@ export type Database = {
         Update: {
           account_id?: number
           amount_orig?: number
+          balance?: number | null
           bank_ref?: string | null
           batch_id?: number
           cheque_no?: string | null
           created_at?: string
+          entry_id?: number | null
           id?: never
           ignored?: boolean
           line_date?: string
           line_hash?: string
+          line_seq?: number | null
           match_type?: string | null
           note?: string | null
           payer_summary?: string | null
@@ -409,12 +427,112 @@ export type Database = {
           },
         ]
       }
+      cash_entries: {
+        Row: {
+          account_id: number
+          amount: number
+          amount_usd: number | null
+          attachments: string[]
+          bank_ref: string | null
+          cheque_no: string | null
+          counterparty: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          direction: string
+          entry_date: string
+          entry_no: string
+          fee_of: number | null
+          from_line: boolean
+          fx_rate: number | null
+          id: number
+          module: string
+          not_lines: number[]
+          note: string | null
+          parts: Json | null
+          peer_id: number | null
+          summary: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          account_id: number
+          amount: number
+          amount_usd?: number | null
+          attachments?: string[]
+          bank_ref?: string | null
+          cheque_no?: string | null
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          direction: string
+          entry_date: string
+          entry_no?: string
+          fee_of?: number | null
+          from_line?: boolean
+          fx_rate?: number | null
+          id?: never
+          module?: string
+          not_lines?: number[]
+          note?: string | null
+          parts?: Json | null
+          peer_id?: number | null
+          summary?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          account_id?: number
+          amount?: number
+          amount_usd?: number | null
+          attachments?: string[]
+          bank_ref?: string | null
+          cheque_no?: string | null
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          direction?: string
+          entry_date?: string
+          entry_no?: string
+          fee_of?: number | null
+          from_line?: boolean
+          fx_rate?: number | null
+          id?: never
+          module?: string
+          not_lines?: number[]
+          note?: string | null
+          parts?: Json | null
+          peer_id?: number | null
+          summary?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_entries_peer_id_fkey"
+            columns: ["peer_id"]
+            isOneToOne: false
+            referencedRelation: "cash_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cheque_logs: {
         Row: {
           action: string
           actor: string | null
           actor_name: string | null
           at: string
+          changes: Json | null
           cheque_id: number
           from_status: string | null
           id: number
@@ -426,6 +544,7 @@ export type Database = {
           actor?: string | null
           actor_name?: string | null
           at?: string
+          changes?: Json | null
           cheque_id: number
           from_status?: string | null
           id?: never
@@ -437,6 +556,7 @@ export type Database = {
           actor?: string | null
           actor_name?: string | null
           at?: string
+          changes?: Json | null
           cheque_id?: number
           from_status?: string | null
           id?: never
@@ -602,6 +722,7 @@ export type Database = {
           paid_on: string | null
           payments: Json
           payout_ratio: number | null
+          payout_rate: number | null
           per_term_usd: number | null
           prepared_at: string | null
           prepared_by: string | null
@@ -652,6 +773,7 @@ export type Database = {
           paid_on?: string | null
           payments?: Json
           payout_ratio?: number | null
+          payout_rate?: number | null
           per_term_usd?: number | null
           prepared_at?: string | null
           prepared_by?: string | null
@@ -702,6 +824,7 @@ export type Database = {
           paid_on?: string | null
           payments?: Json
           payout_ratio?: number | null
+          payout_rate?: number | null
           per_term_usd?: number | null
           prepared_at?: string | null
           prepared_by?: string | null
@@ -953,6 +1076,48 @@ export type Database = {
         }
         Relationships: []
       }
+      journal_log: {
+        Row: {
+          account_id: number | null
+          action: string
+          at: string
+          book: string
+          by_user: string | null
+          detail: Json
+          doc_no: string | null
+          entry_id: number | null
+          id: number
+          line_id: number | null
+          txid: number
+        }
+        Insert: {
+          account_id?: number | null
+          action: string
+          at?: string
+          book: string
+          by_user?: string | null
+          detail?: Json
+          doc_no?: string | null
+          entry_id?: number | null
+          id?: never
+          line_id?: number | null
+          txid?: number
+        }
+        Update: {
+          account_id?: number | null
+          action?: string
+          at?: string
+          book?: string
+          by_user?: string | null
+          detail?: Json
+          doc_no?: string | null
+          entry_id?: number | null
+          id?: never
+          line_id?: number | null
+          txid?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active: boolean
@@ -962,6 +1127,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          journal_duty: string | null
           notify_email: boolean
           notify_lang: string
           perms: Json | null
@@ -977,6 +1143,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          journal_duty?: string | null
           notify_email?: boolean
           notify_lang?: string
           perms?: Json | null
@@ -992,6 +1159,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          journal_duty?: string | null
           notify_email?: boolean
           notify_lang?: string
           perms?: Json | null
@@ -1012,7 +1180,7 @@ export type Database = {
       receipt_claims: {
         Row: {
           amount_orig: number | null
-          amount_usd: number
+          amount_usd: number | null
           claim_date: string
           claim_no: string
           created_at: string
@@ -1030,7 +1198,7 @@ export type Database = {
         }
         Insert: {
           amount_orig?: number | null
-          amount_usd: number
+          amount_usd?: number | null
           claim_date: string
           claim_no: string
           created_at?: string
@@ -1048,7 +1216,7 @@ export type Database = {
         }
         Update: {
           amount_orig?: number | null
-          amount_usd?: number
+          amount_usd?: number | null
           claim_date?: string
           claim_no?: string
           created_at?: string
@@ -1305,6 +1473,7 @@ export type Database = {
           email: string
           full_name: string | null
           invited_by: string | null
+          journal_duty: string | null
           perms: Json | null
           role: Database["public"]["Enums"]["app_role"]
           salesperson_id: number | null
@@ -1316,6 +1485,7 @@ export type Database = {
           email: string
           full_name?: string | null
           invited_by?: string | null
+          journal_duty?: string | null
           perms?: Json | null
           role: Database["public"]["Enums"]["app_role"]
           salesperson_id?: number | null
@@ -1327,6 +1497,7 @@ export type Database = {
           email?: string
           full_name?: string | null
           invited_by?: string | null
+          journal_duty?: string | null
           perms?: Json | null
           role?: Database["public"]["Enums"]["app_role"]
           salesperson_id?: number | null
@@ -1559,6 +1730,8 @@ export type Database = {
           paid_on: string | null
           paid_usd: number | null
           payments: Json | null
+          payout_ghs: number | null
+          payout_rate: number | null
           payout_ratio: number | null
           payout_usd: number | null
           per_term_usd: number | null
@@ -1608,6 +1781,60 @@ export type Database = {
             referencedColumns: ["key"]
           },
         ]
+      }
+      v_journal: {
+        Row: {
+          account_id: number | null
+          account_kind: string | null
+          account_name: string | null
+          amount_in: number | null
+          amount_out: number | null
+          amount_usd: number | null
+          bank_balance: number | null
+          bank_ref: string | null
+          bank_summary: string | null
+          counterparty: string | null
+          created_at: string | null
+          created_by_name: string | null
+          currency: string | null
+          doc_no: string | null
+          entry_date: string | null
+          entry_id: number | null
+          fill_status: string | null
+          fx_rate: number | null
+          key: string | null
+          line_id: number | null
+          module: string | null
+          parts: Json | null
+          peer_account_id: number | null
+          peer_account_name: string | null
+          receipt_id: number | null
+          seq: number | null
+          source: string | null
+          source_id: number | null
+          summary: string | null
+          waiting: boolean | null
+        }
+        Relationships: []
+      }
+      v_journal_log: {
+        Row: {
+          account_id: number | null
+          account_name: string | null
+          action: string | null
+          at: string | null
+          book: string | null
+          by_name: string | null
+          by_user: string | null
+          currency: string | null
+          detail: Json | null
+          doc_no: string | null
+          entry_id: number | null
+          id: number | null
+          line_id: number | null
+          txid: number | null
+        }
+        Relationships: []
       }
       v_receipt_claims: {
         Row: {
@@ -1712,15 +1939,20 @@ export type Database = {
           account_id: number | null
           account_name: string | null
           amount_orig: number | null
+          balance: number | null
           bank_ref: string | null
           batch_id: number | null
           cheque_no: string | null
           created_at: string | null
           currency: string | null
+          entry_id: number | null
+          entry_module: string | null
+          entry_no: string | null
           id: number | null
           ignored: boolean | null
           line_date: string | null
           line_hash: string | null
+          line_seq: number | null
           match_status: string | null
           match_type: string | null
           note: string | null
@@ -1887,10 +2119,36 @@ export type Database = {
         }
         Returns: Json
       }
+      delete_cash_entry: { Args: { p_id: number; p_updated_at?: string }; Returns: undefined }
+      journal_todo_count: { Args: never; Returns: Json }
+      maintenance_status: { Args: never; Returns: Json }
+      pair_line_entry: { Args: { p_entry_id: number; p_line_id: number }; Returns: Json }
+      set_maintenance: { Args: { p_active: boolean; p_note?: string }; Returns: Json }
+      fill_statement_lines: { Args: { p: Json; p_line_ids: number[] }; Returns: number }
       import_cheques: { Args: { p_rows: Json }; Returns: Json }
       import_vehicles: {
         Args: { p_opening_date: string; p_rows: Json; p_update?: boolean }
         Returns: Json
+      }
+      journal_month: {
+        Args: { p_account?: number; p_from: string; p_to: string }
+        Returns: {
+          account_id: number
+          bank_balance: number | null
+          bank_date: string | null
+          bank_diff: number | null
+          closing: number
+          expense: number
+          has_opening: boolean
+          income: number
+          line_n: number
+          opening: number
+          pending_amount: number
+          pending_n: number
+          unfilled_n: number
+          waiting_amount: number
+          waiting_n: number
+        }[]
       }
       link_submission: {
         Args: { p_receipt_id: number; p_submission_id: number }
@@ -1950,6 +2208,10 @@ export type Database = {
         Args: { p_action: string; p_id: number; p_note?: string }
         Returns: undefined
       }
+      receipt_fill_rate: {
+        Args: { p_approve?: boolean; p_id: number; p_rate: number }
+        Returns: undefined
+      }
       receipt_report_text: { Args: { p_receipt_id: number }; Returns: string }
       request_receipt_info: {
         Args: { p_note?: string; p_receipt_id: number; p_salesperson_id: number }
@@ -1959,14 +2221,20 @@ export type Database = {
         Args: { p_doc_type: string; p_steps: Json }
         Returns: undefined
       }
+      save_cash_entry: { Args: { p: Json }; Returns: Json }
       save_claims: {
         Args: { p_claims: Json; p_receipt_id: number }
         Returns: undefined
       }
       save_commission_voucher: { Args: { p: Json }; Returns: number }
       save_cheques: { Args: { p_rows: Json }; Returns: Json }
+      save_openings: { Args: { p_date: string; p_rows: Json }; Returns: number }
       save_receipt: {
         Args: { p_claims?: Json; p_receipt: Json }
+        Returns: number
+      }
+      save_receipt_with_parts: {
+        Args: { p_claims: Json; p_entry: Json; p_receipt: Json }
         Returns: number
       }
       save_voucher_flow: { Args: { p_steps: Json }; Returns: undefined }
@@ -1979,6 +2247,7 @@ export type Database = {
         Returns: undefined
       }
       today_accra: { Args: never; Returns: string }
+      unpair_line_entry: { Args: { p_line_id: number }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "finance" | "sales"

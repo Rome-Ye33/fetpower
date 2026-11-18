@@ -17,9 +17,10 @@ type Props = {
   style?: React.CSSProperties
   /** 只列这些客户（比如某个业务员名下的）；不传就列全部。当前已选的客户不受影响 */
   only?: Set<number> | null
+  disabled?: boolean
 }
 
-export default function CustomerSelect({ value, onChange, allowCreate, salespersonId, placeholder, style, only }: Props) {
+export default function CustomerSelect({ value, onChange, allowCreate, salespersonId, placeholder, style, only, disabled }: Props) {
   const t = useT()
   const { customers, reload } = useRefData()
   const { message } = App.useApp()
@@ -63,6 +64,7 @@ export default function CustomerSelect({ value, onChange, allowCreate, salespers
       showSearch={{ filterOption: false, onSearch: setText, searchValue: text }}
       allowClear
       loading={creating}
+      disabled={disabled}
       value={value ?? undefined}
       placeholder={placeholder ?? t('选择客户')}
       style={style}

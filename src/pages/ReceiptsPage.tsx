@@ -1,29 +1,25 @@
-import { PaperClipOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import { PaperClipOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { Badge, Button, DatePicker, Input, Select, Space, Table, Tabs, Tag, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useState } from 'react'
 import ReceiptEditor from '../components/ReceiptEditor'
+import ReceiptImport from '../components/ReceiptImport'
 import SubmissionList from '../components/SubmissionList'
 import { RECEIPT_STATUS_LABEL, receiptStatus, useFlow } from '../lib/flow'
 import type { ReceiptStatus } from '../lib/flow'
-import { pickCol, textCol } from '../lib/colFilter'
+import { colsWidth, pickCol, textCol } from '../lib/colFilter'
 import { cleanSearch, money, todayAccra, usd } from '../lib/format'
 import { useAuth } from '../lib/auth'
-import { tr, useT } from '../lib/i18n'
+import { useT } from '../lib/i18n'
 import { accountOptions, useRefData } from '../lib/refdata'
 import { useSubmissionCount } from '../lib/submissions'
 import { supabase } from '../lib/supabase'
+import { UNLOCKED_KINDS, UNLOCKED_LIVE } from '../lib/unlocked'
 import type { Receipt } from '../lib/supabase'
 
 export const CLAIM_COLOR: Record<string, string> = { 未认领: 'red', 部分认领: 'orange', 已认领: 'green' }
 export const BANK_COLOR: Record<string, string> = { 已核对: 'green', 银行查不到: 'red', 待核对: 'default', 无需核对: 'default' }
-
-export function reportTag(r: Receipt) {
-  if (r.needs_correction) return <Tag color="orange">{tr('需发修改')}</Tag>
-  if (r.is_reported) return <Tag color="green">{tr('已报 {date}', { date: r.report_date?.slice(5) ?? '' })}</Tag>
-  return <Tag color="blue">{tr('未报')}</Tag>
-}
 
 function ReceiptList() {
   const t = useT()
@@ -37,15 +33,29 @@ function ReceiptList() {
   const [accountId, setAccountId] = useState<number | undefined>()
   const [approval, setApproval] = useState<ReceiptStatus | undefined>()
   const [claimStatus, setClaimStatus] = useState<string | undefined>()
-  const [reportStatus, setReportStatus] = useState<string | undefined>()
   const [bankStatus, setBankStatus] = useState<string | undefined>()
   const [q, setQ] = useState('')
   const [editor, setEditor] = useState<{ open: boolean; id: number | null }>({ open: false, id: null })
+  const [importOpen, setImportOpen] = useState(false)
   /** 列头筛选后表里实际显示的行（合计按它算） */
   const [shown, setShown] = useState<Receipt[] | null>(null)
+  /** 拆分里有“大架号未锁定”（只选了客户、还没定车）的到账：id → 到账日期 */
+  const [unlocked, setUnlocked] = useState<Map<number, string>>(new Map())
 
   const load = useCallback(async () => {
     setLoading(true)
+    // 先查哪些到账还有没定车的拆分（列表上标出来、筛选、顶上的数字都用它）
+    const { data: uc } = await supabase
+      .from('v_receipt_claims')
+      .select('receipt_id, claim_date')
+      .is('vehicle_id', null)
+      .not('receipt_id', 'is', null)
+      .in('nature_kind', UNLOCKED_KINDS)
+      .or(UNLOCKED_LIVE)
+      .limit(5000)
+    const um = new Map<number, string>()
+    for (const c of uc ?? []) if (c.receipt_id != null) um.set(c.receipt_id, c.claim_date ?? '')
+    setUnlocked(um)
     let query = supabase
       .from('v_bank_receipts')
       .select('*')
@@ -56,18 +66,16 @@ function ReceiptList() {
       .limit(2000)
     if (accountId) query = query.eq('account_id', accountId)
     if (approval) query = query.eq('status', approval)
-    if (claimStatus) query = query.eq('claim_status', claimStatus)
+    if (claimStatus === '大架号未锁定') query = query.in('id', um.size ? [...um.keys()] : [0])
+    else if (claimStatus) query = query.eq('claim_status', claimStatus)
     if (bankStatus) query = query.eq('bank_status', bankStatus)
-    if (reportStatus === '未报') query = query.eq('is_reported', false)
-    if (reportStatus === '已报') query = query.eq('is_reported', true)
-    if (reportStatus === '需发修改') query = query.eq('needs_correction', true)
     const s = cleanSearch(q)
     if (s) query = query.or(`receipt_no.ilike.%${s}%,payer_summary.ilike.%${s}%,note.ilike.%${s}%,bank_ref.ilike.%${s}%,cheque_no.ilike.%${s}%`)
     const { data } = await query
     setRows(data ?? [])
     setShown(null)
     setLoading(false)
-  }, [range, accountId, approval, claimStatus, reportStatus, bankStatus, q])
+  }, [range, accountId, approval, claimStatus, bankStatus, q])
 
   useEffect(() => {
     void load()
@@ -105,16 +113,22 @@ function ReceiptList() {
     { title: 'USD', dataIndex: 'amount_usd', width: 96, align: 'right', render: (v: number) => <span className="num">{usd(v)}</span> },
     {
       title: t('拆分'),
-      width: 150,
+      width: 190,
       render: (_, r) => (
-        <Space size={4}>
+        <Space size={4} wrap>
           <Tag color={CLAIM_COLOR[r.claim_status ?? '']}>{t(r.claim_status ?? '')}</Tag>
           {r.claim_status === '部分认领' && <span className="hint">{t('剩 {amt}', { amt: money(r.pending_orig) })}</span>}
+          {r.id != null && unlocked.has(r.id) && (
+            <Tooltip title={t('拆分里有只选了客户、还没定车的，知道是哪台车后打开这笔把车选上')}>
+              <Tag color="orange" className="unlocked-tag">
+                {t('大架号未锁定')}
+              </Tag>
+            </Tooltip>
+          )}
         </Space>
       ),
       ...pickCol(rows, (r) => r.claim_status, t),
     },
-    { title: t('报款'), width: 100, render: (_, r) => reportTag(r), ...pickCol(rows, (r) => (r.needs_correction ? '需发修改' : r.is_reported ? '已报' : '未报'), t) },
     {
       title: t('银行核对'),
       dataIndex: 'bank_status',
@@ -122,7 +136,13 @@ function ReceiptList() {
       render: (v: string) => <Tag color={BANK_COLOR[v]}>{t(v)}</Tag>,
       ...pickCol(rows, (r) => r.bank_status, t),
     },
-    { title: t('付款方 / 摘要'), dataIndex: 'payer_summary', ellipsis: true, ...textCol<Receipt>((r) => `${r.payer_summary ?? ''} ${r.bank_ref ?? ''} ${r.cheque_no ?? ''}`) },
+    {
+      title: t('付款方 / 摘要'),
+      dataIndex: 'payer_summary',
+      width: 220,
+      ellipsis: true,
+      ...textCol<Receipt>((r) => `${r.payer_summary ?? ''} ${r.bank_ref ?? ''} ${r.cheque_no ?? ''}`),
+    },
     {
       title: '',
       width: 36,
@@ -138,6 +158,13 @@ function ReceiptList() {
   // 合计只算已生效的（审批中、退回的还不算到账）
   const total = (shown ?? rows).filter((r) => receiptStatus(r.status) === 'approved').reduce((s, r) => s + Number(r.amount_usd ?? 0), 0)
   const opts = (list: string[]) => list.map((x) => ({ value: x, label: t(x) }))
+
+  /** 顶上“没定大架号的”：筛出全部还没定车的到账，日期范围放宽到包含最早那一笔（不然早的看不见） */
+  const showUnlocked = () => {
+    const first = [...unlocked.values()].filter(Boolean).sort()[0]
+    if (first && dayjs(first).isBefore(range[0], 'day')) setRange([dayjs(first), range[1]])
+    setClaimStatus('大架号未锁定')
+  }
 
   return (
     <div>
@@ -170,8 +197,15 @@ function ReceiptList() {
           onChange={setApproval}
           options={(['pending', 'approved', 'rejected', 'withdrawn'] as ReceiptStatus[]).map((x) => ({ value: x, label: t(RECEIPT_STATUS_LABEL[x]) }))}
         />
-        <Select allowClear placeholder={t('拆分状态')} style={{ width: 120 }} value={claimStatus} onChange={setClaimStatus} options={opts(['未认领', '部分认领', '已认领'])} />
-        <Select allowClear placeholder={t('报款状态')} style={{ width: 120 }} value={reportStatus} onChange={setReportStatus} options={opts(['未报', '已报', '需发修改'])} />
+        <Select
+          allowClear
+          placeholder={t('拆分状态')}
+          style={{ width: 140 }}
+          value={claimStatus}
+          onChange={setClaimStatus}
+          options={opts(['未认领', '部分认领', '已认领', '大架号未锁定'])}
+          className="claim-filter"
+        />
         <Select
           allowClear
           placeholder={t('银行核对')}
@@ -182,9 +216,19 @@ function ReceiptList() {
         />
         <Input.Search allowClear placeholder={t('编号、摘要、参考号、支票号')} style={{ width: 240 }} onSearch={setQ} />
         <Button icon={<ReloadOutlined />} onClick={() => void load()} />
+        <Badge count={unlocked.size} size="small" color="orange" overflowCount={999}>
+          <Button className="unlocked-btn" onClick={showUnlocked}>
+            {t('没定大架号的')}
+          </Button>
+        </Badge>
         {rxEdit && (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditor({ open: true, id: null })}>
             {t('新建到账')}
+          </Button>
+        )}
+        {rxEdit && (
+          <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
+            {t('批量导入')}
           </Button>
         )}
       </Space>
@@ -194,7 +238,7 @@ function ReceiptList() {
         loading={loading}
         columns={columns}
         dataSource={rows}
-        scroll={{ x: 1300 }}
+        scroll={{ x: colsWidth(columns) }}
         pagination={{ defaultPageSize: 50, showSizeChanger: true, showTotal: (n) => t('共 {n} 笔，已生效合计 {usd}', { n, usd: usd(total) }) }}
         rowClassName={() => 'clickable-row'}
         onRow={(r) => ({ onClick: () => setEditor({ open: true, id: r.id }) })}
@@ -206,6 +250,18 @@ function ReceiptList() {
         onClose={(changed) => {
           setEditor({ open: false, id: null })
           if (changed) void load()
+        }}
+      />
+      <ReceiptImport
+        open={importOpen}
+        onClose={(changed, dates) => {
+          setImportOpen(false)
+          if (!changed) return
+          // 导进来的日期不在现在的日期范围里：把范围放宽到包含它们，不然列表里看不见（范围没变就直接重新读）
+          const lo = dates && dayjs(dates[0]).isBefore(range[0], 'day') ? dayjs(dates[0]) : range[0]
+          const hi = dates && dayjs(dates[1]).isAfter(range[1], 'day') ? dayjs(dates[1]) : range[1]
+          if (lo !== range[0] || hi !== range[1]) setRange([lo, hi])
+          else void load()
         }}
       />
     </div>

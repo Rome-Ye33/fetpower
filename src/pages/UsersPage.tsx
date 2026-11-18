@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { accountCall, MIN_PASSWORD, randomPassword } from '../lib/account'
 import FlowEditor from '../components/FlowEditor'
+import { MaintenanceCard } from '../components/Maintenance'
 import PermEditor, { PermSummary } from '../components/PermEditor'
 import type { PermTarget } from '../components/PermEditor'
 import { ROLE_LABEL, useAuth } from '../lib/auth'
@@ -342,6 +343,7 @@ export default function UsersPage() {
       <div className="page-title">
         <h2>{t('用户与权限')}</h2>
       </div>
+      <MaintenanceCard />
       <Alert
         type="info"
         showIcon
@@ -361,8 +363,8 @@ export default function UsersPage() {
         rflow,
         t('到账审批流'),
         t('财务录入到账'),
-        t('生效（算到账、可报款）'),
-        t('财务录的到账、业务员提交经财务审核转成的到账，录入后都按这个顺序一级一级审，全部通过才算到账（才进余额和报表、才能报款）。一个岗位可以有几个人（谁先审都行），管理员任何一级都可以代办；审批人可以是业务员账号，他只看得到走审批的到账。') +
+        t('生效（算到账）'),
+        t('财务录的到账、业务员提交经财务审核转成的到账，录入后都按这个顺序一级一级审，全部通过才算到账（才进余额和报表）。一个岗位可以有几个人（谁先审都行），管理员任何一级都可以代办；审批人可以是业务员账号，他只看得到走审批的到账。') +
           t('要加一级、删一级、改名字或调顺序，点右上角“调整审批流”；改了只影响之后录入的到账。'),
         t('还没有审批级别：现在到账录入后直接生效。点“调整审批流”加级别。'),
         ccBlock,
@@ -414,14 +416,14 @@ export default function UsersPage() {
             width: 240,
             render: (_, p) => (
               <div className="perm-cell">
-                <PermSummary role={p.role} perms={p.perms} />
+                <PermSummary role={p.role} perms={p.perms} duty={p.journal_duty} />
                 {p.role === 'finance' && (
                   <Button
                     size="small"
                     type="link"
                     icon={<EditOutlined />}
                     className="perm-set"
-                    onClick={() => setPermFor({ kind: 'profile', id: p.id, name: personName(p), perms: p.perms })}
+                    onClick={() => setPermFor({ kind: 'profile', id: p.id, name: personName(p), perms: p.perms, duty: p.journal_duty })}
                   >
                     {t('设置')}
                   </Button>
@@ -551,14 +553,14 @@ export default function UsersPage() {
                 ) : null
               ) : (
                 <div className="perm-cell">
-                  <PermSummary role={i.role} perms={i.perms} />
+                  <PermSummary role={i.role} perms={i.perms} duty={i.journal_duty} />
                   {i.role === 'finance' && (
                     <Button
                       size="small"
                       type="link"
                       icon={<EditOutlined />}
                       className="perm-set"
-                      onClick={() => setPermFor({ kind: 'invite', email: i.email, name: personName(i), perms: i.perms })}
+                      onClick={() => setPermFor({ kind: 'invite', email: i.email, name: personName(i), perms: i.perms, duty: i.journal_duty })}
                     >
                       {t('设置')}
                     </Button>

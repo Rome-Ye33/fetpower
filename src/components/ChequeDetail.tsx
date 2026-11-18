@@ -12,6 +12,7 @@ import { useT } from '../lib/i18n'
 import { accountOptions, useRefData } from '../lib/refdata'
 import { supabase } from '../lib/supabase'
 import type { Receipt } from '../lib/supabase'
+import EditChanges from './EditChanges'
 
 // 一张支票：信息、状态操作（定计划、存票、退票、取消、恢复、生成到账、对上到账、取消关联、删除）、记录
 // 「记一条沟通」「请业务确认」两个按钮 Rome 2026-11-13 去掉了：导表格带进来的沟通记录、等业务确认状态照旧，只是不再手工记新的。
@@ -205,7 +206,6 @@ export default function ChequeDetail({ open, cheque, onClose, onChanged, onEdit,
               {t('支票')} {c.cheque_no}
             </span>
             <Tag color={CHEQUE_STATUS_COLOR[status]}>{t(CHEQUE_STATUS_LABEL[status])}</Tag>
-            {status === 'cleared' && (c.is_reported ? <Tag color="green">{t('已报回款')}</Tag> : <Tag color="blue">{t('未报回款')}</Tag>)}
           </Space>
         ) : (
           t('支票')
@@ -278,7 +278,7 @@ export default function ChequeDetail({ open, cheque, onClose, onChanged, onEdit,
               <Descriptions.Item label={t('到账')} span={2}>
                 {canView('receipts') ? <a onClick={() => onOpenReceipt(c.receipt_id!)}>{c.receipt_no}</a> : c.receipt_no}
                 <span className="hint" style={{ marginInlineStart: 8 }}>
-                  {c.receipt_date} · {rflow.stageLabel(c.receipt_status, null)} · {c.is_reported ? t('已报回款') : t('还没报回款，到到账录入里报')}
+                  {c.receipt_date} · {rflow.stageLabel(c.receipt_status, null)}
                 </span>
               </Descriptions.Item>
             )}
@@ -344,6 +344,8 @@ export default function ChequeDetail({ open, cheque, onClose, onChanged, onEdit,
                           </span>
                         </div>
                         {l.note && <div className={l.action === 'bounce' || l.action === 'cancel' ? 'text-danger' : undefined}>{l.note}</div>}
+                        {/* 改了什么（43）：哪几项、改前 → 改后 */}
+                        {l.action === 'edit' && <EditChanges changes={l.changes} currency={c?.currency ?? undefined} />}
                       </div>
                     ),
                   }))}

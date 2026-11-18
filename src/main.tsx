@@ -7,8 +7,10 @@ import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import App from './App'
+import { MaintenancePage } from './components/Maintenance'
 import { AuthProvider } from './lib/auth'
 import { LangProvider, useI18n } from './lib/i18n'
+import { MaintenanceGate, MaintenanceProvider } from './lib/maintenance'
 import { captureGo } from './lib/notify'
 import { RefDataProvider } from './lib/refdata'
 import './styles.css'
@@ -51,7 +53,7 @@ const THEME: ThemeConfig = {
 function Themed({ children }: { children: ReactNode }) {
   const { lang } = useI18n()
   useEffect(() => {
-    document.title = lang === 'en' ? 'Sales Management' : '销售管理 · Sales Management'
+    document.title = lang === 'en' ? 'Sales & Finance' : '业财管理 · Sales & Finance'
   }, [lang])
   return (
     <ConfigProvider locale={lang === 'en' ? enUS : zhCN} theme={THEME}>
@@ -70,9 +72,14 @@ createRoot(document.getElementById('root')!).render(
         <AntApp>
           <HashRouter>
             <AuthProvider>
-              <RefDataProvider>
-                <App />
-              </RefDataProvider>
+              {/* 维护期间被挡在外面的人只看到维护提示页，里面的页面不挂上、不发请求 */}
+              <MaintenanceProvider>
+                <MaintenanceGate blockedView={<MaintenancePage />}>
+                  <RefDataProvider>
+                    <App />
+                  </RefDataProvider>
+                </MaintenanceGate>
+              </MaintenanceProvider>
             </AuthProvider>
           </HashRouter>
         </AntApp>

@@ -1,7 +1,9 @@
 import {
+  AccountBookOutlined,
   AppstoreOutlined,
   BankOutlined,
   CarOutlined,
+  WalletOutlined,
   CreditCardOutlined,
   DatabaseOutlined,
   FileDoneOutlined,
@@ -16,18 +18,22 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import ChangePassword from './components/ChangePassword'
 import LangSwitch from './components/LangSwitch'
 import Logo from './components/Logo'
+import { MaintenanceBanner } from './components/Maintenance'
 import NotifySettings from './components/NotifySettings'
 import { ROLE_LABEL, useAuth } from './lib/auth'
 import { useChequeAlert } from './lib/cheques'
 import { useVoucherTodo } from './lib/commission'
 import { useI18n } from './lib/i18n'
+import { useLineTodo } from './lib/journal'
 import { goPath, takeGo } from './lib/notify'
 import { useSubmissionCount } from './lib/submissions'
 import { useTodoCount } from './lib/workbench'
+import { useBadges } from './lib/badges'
 import LoginPage from './pages/LoginPage'
 
 const ReceiptsPage = lazy(() => import('./pages/ReceiptsPage'))
 const ChequesPage = lazy(() => import('./pages/ChequesPage'))
+const JournalPage = lazy(() => import('./pages/JournalPage'))
 const VehiclesPage = lazy(() => import('./pages/VehiclesPage'))
 const ReconcilePage = lazy(() => import('./pages/ReconcilePage'))
 const BaseDataPage = lazy(() => import('./pages/BaseDataPage'))
@@ -47,12 +53,13 @@ function FullSpin() {
   )
 }
 
-/** 菜单文字 + 右边的数字（待审核 / 被退回）。地方不够时文字出省略号，数字总是看得见 */
-function withCount(label: string, n: number) {
+/** 菜单文字 + 右边的数字（待审核 / 被退回）；warn：再加一个橙色的数字（业务员名下大架号未锁定的到账）。地方不够时文字出省略号，数字总是看得见 */
+function withCount(label: string, n: number, warn = 0) {
   return (
     <span className="menu-label">
       <span className="menu-label-text">{label}</span>
       {n > 0 && <Badge count={n} size="small" />}
+      {warn > 0 && <Badge count={warn} size="small" color="orange" className="menu-badge-warn" />}
     </span>
   )
 }
@@ -77,6 +84,10 @@ export default function App() {
   const todo = useTodoCount(!!auth.role)
   // 支票：到期还没存的 + 存了 3 天还没到账的
   const chequeAlert = useChequeAlert(canView('cheques'))
+  // 银行流水还没填的（按分工：填收款的只算收进来的、填付款的只算付出去的）：管填流水的人才提醒
+  const lineTodo = useLineTodo(canView('reconcile') && (auth.canEdit('reconcile') || auth.canEdit('journal')), auth.duty)
+  // 业务员：自己名下还没定是哪台车的到账（大架号未锁定），在“提交到账”上用橙色数字提醒他告诉财务是哪台车
+  const unlocked = useBadges(isSales, false, false, true).unlocked
 
   // 登录后换成这个人上次选的语言
   useEffect(() => {
@@ -131,6 +142,8 @@ export default function App() {
         ...(canView('receipts')
           ? [{ key: '/receipts', icon: <MoneyCollectOutlined />, label: withCount(t('到账录入'), pending) }]
           : []),
+        ...(canView('journal') ? [{ key: '/journal', icon: <AccountBookOutlined />, label: t('银行日记账') }] : []),
+        ...(canView('cash') ? [{ key: '/cash', icon: <WalletOutlined />, label: t('现金日记账') }] : []),
         ...(canView('cheques')
           ? [{ key: '/cheques', icon: <CreditCardOutlined />, label: withCount(t('支票管理'), chequeAlert) }]
           : []),
@@ -138,13 +151,13 @@ export default function App() {
         ...(canView('commission')
           ? [{ key: '/commission', icon: <FileDoneOutlined />, label: withCount(t('提成申请单'), voucherTodo) }]
           : []),
-        ...(canView('reconcile') ? [{ key: '/reconcile', icon: <BankOutlined />, label: t('银行对账') }] : []),
+        ...(canView('reconcile') ? [{ key: '/reconcile', icon: <BankOutlined />, label: withCount(t('银行对账'), lineTodo) }] : []),
         ...(canView('base') ? [{ key: '/base', icon: <DatabaseOutlined />, label: t('基础资料') }] : []),
         ...(auth.isAdmin ? [{ key: '/users', icon: <TeamOutlined />, label: t('用户与权限') }] : []),
       ]
     : [
         workbench,
-        { key: '/submit', icon: <SendOutlined />, label: withCount(t('提交到账'), rejected) },
+        { key: '/submit', icon: <SendOutlined />, label: withCount(t('提交到账'), rejected, unlocked) },
         { key: '/vehicles', icon: <CarOutlined />, label: t('我的车辆') },
         { key: '/commission', icon: <FileDoneOutlined />, label: withCount(t('提成申请单'), voucherTodo) },
       ]
@@ -205,11 +218,16 @@ export default function App() {
           </Space>
         </Header>
         <Content className="app-content">
+          {/* 维护开着时管理员每个页面顶上都有提示和“结束维护”，免得忘了关 */}
+          <MaintenanceBanner />
           <div className="app-page">
             <Suspense fallback={<FullSpin />}>
               <Routes>
                 <Route path="/workbench" element={<WorkbenchPage />} />
                 {canView('receipts') && <Route path="/receipts" element={<ReceiptsPage />} />}
+                {/* 两本日记账同一个页面，key 不一样：切过去时重新开始（选着的账户、标签页不带过去） */}
+                {canView('journal') && <Route path="/journal" element={<JournalPage key="bank" scope="bank" />} />}
+                {canView('cash') && <Route path="/cash" element={<JournalPage key="cash" scope="cash" />} />}
                 {canView('cheques') && <Route path="/cheques" element={<ChequesPage />} />}
                 {isSales && <Route path="/submit" element={<SubmitPage />} />}
                 {(isSales || canView('vehicles')) && <Route path="/vehicles" element={<VehiclesPage />} />}

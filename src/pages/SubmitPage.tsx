@@ -1,7 +1,9 @@
 import { PaperClipOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
-import { Button, Card, Empty, Segmented, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Empty, Segmented, Space, Spin, Tag, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import SubmissionForm from '../components/SubmissionForm'
+import UnlockedDrawer from '../components/UnlockedDrawer'
+import { useBadges } from '../lib/badges'
 import { useFlow } from '../lib/flow'
 import { dateTime, money, num, usd } from '../lib/format'
 import { useT } from '../lib/i18n'
@@ -24,6 +26,9 @@ export default function SubmitPage() {
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [editing, setEditing] = useState<{ open: boolean; sub: Submission | null }>({ open: false, sub: null })
+  /** 自己名下还没定是哪台车的到账（大架号未锁定）有几笔：和菜单角标用同一个数 */
+  const unlocked = useBadges(true, false, false, true).unlocked
+  const [unlockedOpen, setUnlockedOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -74,6 +79,20 @@ export default function SubmitPage() {
       <Typography.Paragraph type="secondary">
         {t('客户的钱到了就在这里提交，附上转账截图。财务审核通过后才算到账；被退回的按原因改好再提交。财务请你填写的也在这里：填好这笔钱是哪台车的再提交。')}
       </Typography.Paragraph>
+      {unlocked > 0 && (
+        <Alert
+          className="unlocked-alert"
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={t('你有 {n} 笔到账还没定是哪台车（大架号未锁定），不算进车的回款。知道是哪台车后请告诉财务。', { n: unlocked })}
+          action={
+            <Button size="small" onClick={() => setUnlockedOpen(true)}>
+              {t('查看')}
+            </Button>
+          }
+        />
+      )}
       <Segmented options={options} value={filter} onChange={(v) => setFilter(v as Filter)} style={{ marginBottom: 12, maxWidth: '100%', overflowX: 'auto' }} />
       <Spin spinning={loading}>
         {shown.length === 0 ? (
@@ -140,6 +159,7 @@ export default function SubmitPage() {
           </Space>
         )}
       </Spin>
+      <UnlockedDrawer open={unlockedOpen} onClose={() => setUnlockedOpen(false)} />
       <SubmissionForm
         open={editing.open}
         submission={editing.sub}

@@ -1,7 +1,8 @@
 // 工作台：到账提交、提成单、到账（录入后的审批）三种审批并在一起，按登录的人分成待办 / 已办 / 已发起 / 已结束 / 抄送
 // （数据库视图 v_workbench 算好）。每一步谁做的、什么时候、退回原因记在 approval_logs（触发器写）；
 // 到账生效时抄送给了谁记在 approval_cc（30，触发器写，名单在“用户与权限 → 到账审批流”）。
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { useBadges } from './badges'
 import { useFlow } from './flow'
 import { useT } from './i18n'
 import { STATUS_COLOR, STATUS_LABEL } from './submissions'
@@ -65,6 +66,7 @@ export const ACTION_LABEL: Record<string, string> = {
   reopen: '到账被删除，回到待审核',
   request: '已请业务员填写',
   cancel: '取消了请业务员填写',
+  edit: '已修改',
 }
 export const ACTION_COLOR: Record<string, string> = {
   submit: 'blue',
@@ -77,6 +79,7 @@ export const ACTION_COLOR: Record<string, string> = {
   reopen: 'gray',
   request: 'orange',
   cancel: 'gray',
+  edit: 'purple',
 }
 
 export function docType(x: string | null | undefined): DocType {
@@ -120,11 +123,29 @@ export function useDocLabels() {
   )
 }
 
-/** 某一栏的查询（不含分页） */
-export function boxQuery(box: Box, type: DocType | 'all', count: 'exact' | undefined = undefined, head = false) {
+/** 某一栏的查询（不含分页）；search 是 searchFilter（wbSearch.ts）给的搜索条件 */
+export function boxQuery(box: Box, type: DocType | 'all', count: 'exact' | undefined = undefined, head = false, search: string | null = null) {
   let q = supabase.from('v_workbench').select('*', { count, head }).eq(BOX_COLUMN[box], true)
   if (type !== 'all') q = q.eq('doc_type', type)
+  if (search) q = q.or(search)
   return q
+}
+
+/** 五栏各有几件：一个查询取回标记列，在浏览器里数（搜索时数搜到的）。
+ *  原来每栏各发一个计数查询，打开一次工作台就有 6 个重查询同时压上去（2026-11-13 卡死的原因之一） */
+export async function boxCounts(type: DocType | 'all', search: string | null = null): Promise<Record<Box, number>> {
+  const inAny = BOXES.map((b) => `${BOX_COLUMN[b]}.eq.true`).join(',')
+  // 搜索时：在任一栏，并且对上搜索条件（合成一个 or 参数）
+  let q = supabase
+    .from('v_workbench')
+    .select('in_todo,in_done,in_mine,in_ended,in_cc')
+    .or(search ? `and(or(${inAny}),${search})` : inAny)
+    .limit(5000)
+  if (type !== 'all') q = q.eq('doc_type', type)
+  const { data } = await q
+  const rows = data ?? []
+  const n = (b: Box) => rows.filter((r) => r[BOX_COLUMN[b]]).length
+  return { todo: n('todo'), done: n('done'), mine: n('mine'), ended: n('ended'), cc: n('cc') }
 }
 
 /** 一张单据的审批记录，从早到晚 */
@@ -146,25 +167,7 @@ export async function fetchCc(type: DocType, id: number): Promise<CcRow[]> {
   return data ?? []
 }
 
-/** 待办有几件（菜单上的数字）。每分钟、切回窗口、提交或审批之后刷新 */
+/** 待办有几件（菜单上的数字）。数字由 badges.ts 的共用轮询取（每分钟一次，大家合用一个查询） */
 export function useTodoCount(enabled: boolean): number {
-  const [n, setN] = useState(0)
-  useEffect(() => {
-    if (!enabled) return
-    let alive = true
-    const load = async () => {
-      const { count } = await boxQuery('todo', 'all', 'exact', true)
-      if (alive) setN(count ?? 0)
-    }
-    void load()
-    const timer = window.setInterval(load, 60_000)
-    const events = ['submissions-changed', 'vouchers-changed', 'focus']
-    for (const e of events) window.addEventListener(e, load)
-    return () => {
-      alive = false
-      window.clearInterval(timer)
-      for (const e of events) window.removeEventListener(e, load)
-    }
-  }, [enabled])
-  return enabled ? n : 0
+  return useBadges(enabled).todo
 }

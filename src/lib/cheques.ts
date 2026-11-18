@@ -1,6 +1,6 @@
-// 支票管理：客户给的（分期）支票一张一行，从收到 → 存进银行 → 钱到账（对上一笔到账）→ 报回款。
+// 支票管理：客户给的（分期）支票一张一行，从收到 → 存进银行 → 钱到账（对上一笔到账）。
 // 写库只走数据库函数 save_cheques / import_cheques / cheque_action；读 v_cheques（带客户、车、账户、到账、最近一条沟通）。
-import { useEffect, useState } from 'react'
+import { useBadges } from './badges'
 import type { Json } from './database.types'
 import { todayAccra } from './format'
 import { supabase } from './supabase'
@@ -76,15 +76,14 @@ export function chequeVins(c: Cheque): string[] {
   return s.split(' ').filter(Boolean)
 }
 
-/** 页面顶部的提醒：今天到期 / 本周到期 / 到期没存 / 已存没到账 / 已到账没报回款 */
-export type ChequeAlert = 'due_today' | 'due_week' | 'overdue' | 'deposited' | 'unreported'
-export const CHEQUE_ALERTS: ChequeAlert[] = ['due_today', 'due_week', 'overdue', 'deposited', 'unreported']
+/** 页面顶部的提醒：今天到期 / 本周到期 / 到期没存 / 已存没到账（“已到账没报回款”随报款一起去掉了，Rome 2026-11-16） */
+export type ChequeAlert = 'due_today' | 'due_week' | 'overdue' | 'deposited'
+export const CHEQUE_ALERTS: ChequeAlert[] = ['due_today', 'due_week', 'overdue', 'deposited']
 export const CHEQUE_ALERT_LABEL: Record<ChequeAlert, string> = {
   due_today: '今天到期',
   due_week: '本周到期',
   overdue: '到期还没存',
   deposited: '已存没到账',
-  unreported: '已到账没报回款',
 }
 const OPEN: string[] = ['pending', 'confirming']
 
@@ -109,8 +108,6 @@ export function inAlert(c: Cheque, a: ChequeAlert): boolean {
       return OPEN.includes(c.status ?? '') && d != null && d < 0
     case 'deposited':
       return c.status === 'deposited'
-    case 'unreported':
-      return c.status === 'cleared' && !c.is_reported
   }
 }
 
@@ -130,27 +127,9 @@ export async function fetchChequeLogs(id: number): Promise<ChequeLog[]> {
   return data ?? []
 }
 
-/** 菜单角标：到期还没存的 + 存了 3 天还没到账的（数据库算） */
+/** 菜单角标：到期还没存的 + 存了 3 天还没到账的（数据库算）。数字由 badges.ts 的共用轮询取，5 分钟一次 */
 export function useChequeAlert(enabled: boolean): number {
-  const [n, setN] = useState(0)
-  useEffect(() => {
-    if (!enabled) return
-    let alive = true
-    const load = async () => {
-      const { data } = await supabase.rpc('cheque_alert_count')
-      if (alive) setN(Number(data ?? 0))
-    }
-    void load()
-    const timer = window.setInterval(load, 300_000)
-    const events = ['cheques-changed', 'submissions-changed', 'focus']
-    for (const e of events) window.addEventListener(e, load)
-    return () => {
-      alive = false
-      window.clearInterval(timer)
-      for (const e of events) window.removeEventListener(e, load)
-    }
-  }, [enabled])
-  return enabled ? n : 0
+  return useBadges(enabled, true).cheque
 }
 
 /** 批量录入：第一张的号码加 1、到期日按月加（月底顺延到月末），生成 n 张 */

@@ -4,17 +4,21 @@ import { dateTime } from '../lib/format'
 import { trServer, useT } from '../lib/i18n'
 import { ACTION_COLOR, fetchCc, fetchTrail, useDocLabels } from '../lib/workbench'
 import type { ApprovalLog, CcRow, DocType } from '../lib/workbench'
+import EditChanges from './EditChanges'
 
-// 审批记录：一张单据从提交到结束，每一步谁做的、什么时候、退回原因；到账生效后抄送给了谁（30）排在最后
+// 审批记录：一张单据从提交到结束，每一步谁做的、什么时候、退回原因；到账生效后抄送给了谁（30）排在最后。
+// 审批通过以后改了单据（42）记成“已修改”，下面列出改了哪几项、改前 → 改后
 
 type Props = {
   docType: DocType
   docId: number | null | undefined
   /** 单据有变化（比如 updated_at 变了）时重新读 */
   version?: string | null
+  /** 到账的币种：修改记录里的金额前面带上 */
+  currency?: string
 }
 
-export default function ApprovalTrail({ docType, docId, version }: Props) {
+export default function ApprovalTrail({ docType, docId, version, currency }: Props) {
   const t = useT()
   const labels = useDocLabels()
   // 读到的记录属于哪张单据（换了单据，旧的不显示）
@@ -76,6 +80,7 @@ export default function ApprovalTrail({ docType, docId, version }: Props) {
                       {r.actor_name || t('系统')} · {dateTime(r.at)}
                     </span>
                   </div>
+                  {r.action === 'edit' && <EditChanges changes={r.changes} currency={currency} />}
                   {r.note && (
                     <div className={r.action === 'reject' ? 'text-danger' : undefined}>
                       {r.action === 'request'

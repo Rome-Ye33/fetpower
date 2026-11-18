@@ -48,3 +48,12 @@ export function pickCol<T>(rows: T[], get: Get<T>, label: (v: string) => string 
     onFilter: (value, r) => String(get(r) ?? '') === value,
   }
 }
+
+/**
+ * 表格横向滚动的总宽 = 每列写的宽度相加（extra：勾选框那一列）。
+ * scroll.x 写死一个数的话，列宽加起来一超过它，没写宽度的那一列就被挤没了
+ * （2026-11-16 到账录入「付款方 / 摘要」只剩 72 像素、支票「最近沟通」0 像素），所以每列都写宽度，总宽用这个算。
+ */
+export function colsWidth(cols: readonly { width?: unknown }[], extra = 0): number {
+  return cols.reduce<number>((s, c) => s + (typeof c.width === 'number' ? c.width : 0), extra)
+}

@@ -1,4 +1,5 @@
 // 维护模式（数据库 39）：管理员维护系统时，除管理员以外的人登录了也只看到“系统维护中”。
+// 45 起开始、结束维护时给大家发邮件：管理员读状态时多三项（开关、会发给几个人、这一次的邮件发得怎么样），开关用 setNotify 改。
 // 真正挡人的是数据库：每个请求先过总闸（maintenance_gate），维护期间别人的请求一律回 423。
 // 这里只管：读状态；登录的非管理员页面开着时最多每 5 秒确认一次（别的请求刚成功过就不另外查，切到后台不查），
 // 维护一开始换成维护提示页，一结束整页刷新（顺便换上新版本）；管理员的开关和每页顶上的提示；登录页的提示。
@@ -8,6 +9,22 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react'
 import { useAuth } from './auth'
 import { lastApiOkAt, MAINT_EVENT, supabase } from './supabase'
+
+/** 这一次维护的通知邮件发得怎么样（45，只有管理员读得到）：维护开着时是这次开始的，关着时是上次结束的 */
+export type MaintMail = {
+  event: 'start' | 'end'
+  /** 开始 / 结束的时间 */
+  at: string | null
+  total: number
+  sent: number
+  /** 还没发（等着发、正在发、等重试） */
+  waiting: number
+  failed: number
+  /** 不发了（开关关了、维护已经结束了……） */
+  skipped: number
+  /** 没发出去的原因（数据库或发信服务器给的） */
+  error: string | null
+}
 
 export type MaintStatus = {
   active: boolean
@@ -19,6 +36,13 @@ export type MaintStatus = {
   blocked: boolean
   /** 这次读状态的请求过了数据库的总闸（null = 不知道，比如读不到） */
   gate: boolean | null
+  /** 开始、结束维护时发不发邮件（45，只有管理员读得到；null = 不知道：不是管理员、数据库还没装 45） */
+  notify: boolean | null
+  /** 现在开始维护的话会发给几个人（除管理员以外开通了的账号） */
+  mailTo: number | null
+  mail: MaintMail | null
+  /** 邮件那部分读不到时数据库给的原因（维护本身照常） */
+  mailError: string | null
 }
 
 type MaintState = MaintStatus & {
@@ -29,9 +53,12 @@ type MaintState = MaintStatus & {
   refresh: () => Promise<MaintStatus | null>
   /** 管理员开始 / 结束维护；开着时再开始一次 = 只改说明。出错时抛出 */
   set: (active: boolean, note?: string | null) => Promise<void>
+  /** 管理员开 / 关维护的邮件通知（45）。出错时抛出 */
+  setNotify: (on: boolean) => Promise<void>
 }
 
-const OFF: MaintStatus = { active: false, note: null, since: null, blocked: false, gate: null }
+const MAIL_OFF = { notify: null, mailTo: null, mail: null, mailError: null }
+const OFF: MaintStatus = { active: false, note: null, since: null, blocked: false, gate: null, ...MAIL_OFF }
 /**
  * 登录的非管理员（包括已经被挡在外面的）多久确认一次维护开没开、结束没结束（Rome 2026-11-15：5 秒内换成维护页）。
  * 只是一行表按主键读一下；这段时间里别的请求成功过（也过了总闸）就不另外查；窗口在后台时不查
@@ -61,24 +88,52 @@ function fromGateError(e: RpcError): MaintStatus {
   } catch {
     // 说明读不出来就不显示
   }
-  return { active: true, note, since, blocked: true, gate: true }
+  return { active: true, note, since, blocked: true, gate: true, ...MAIL_OFF }
+}
+
+const str = (v: unknown) => (typeof v === 'string' && v ? v : null)
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+
+function mailFrom(v: unknown): MaintMail | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const d = v as Record<string, unknown>
+  if (d.event !== 'start' && d.event !== 'end') return null
+  return {
+    event: d.event,
+    at: str(d.at),
+    total: num(d.total) ?? 0,
+    sent: num(d.sent) ?? 0,
+    waiting: num(d.waiting) ?? 0,
+    failed: num(d.failed) ?? 0,
+    skipped: num(d.skipped) ?? 0,
+    error: str(d.error),
+  }
 }
 
 function fromData(data: unknown): MaintStatus {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return OFF
   const d = data as Record<string, unknown>
-  const str = (v: unknown) => (typeof v === 'string' && v ? v : null)
   return {
     active: d.active === true,
     note: str(d.note),
     since: str(d.since),
     blocked: d.blocked === true,
     gate: typeof d.gate === 'boolean' ? d.gate : null,
+    notify: typeof d.notify === 'boolean' ? d.notify : null,
+    mailTo: num(d.mail_to),
+    mail: mailFrom(d.mail),
+    mailError: str(d.mail_error),
   }
 }
 
+const sameMail = (a: MaintMail | null, b: MaintMail | null) =>
+  a === b ||
+  (!!a && !!b && a.event === b.event && a.at === b.at && a.total === b.total && a.sent === b.sent && a.waiting === b.waiting &&
+    a.failed === b.failed && a.skipped === b.skipped && a.error === b.error)
+
 const sameStatus = (a: MaintStatus, b: MaintStatus) =>
-  a.active === b.active && a.note === b.note && a.since === b.since && a.blocked === b.blocked && a.gate === b.gate
+  a.active === b.active && a.note === b.note && a.since === b.since && a.blocked === b.blocked && a.gate === b.gate &&
+  a.notify === b.notify && a.mailTo === b.mailTo && a.mailError === b.mailError && sameMail(a.mail, b.mail)
 
 const Ctx = createContext<MaintState | null>(null)
 
@@ -227,9 +282,17 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
     setReadFor(uidRef.current ?? '')
   }, [])
 
+  const setNotify = useCallback(async (on: boolean) => {
+    const { data, error } = await supabase.rpc('set_maintenance_notify', { p_on: on })
+    if (error) throw error
+    setStatus(fromData(data))
+    setFailed(false)
+    setReadFor(uidRef.current ?? '')
+  }, [])
+
   const value = useMemo<MaintState>(
-    () => ({ ...status, blocked, ready: readFor === (uid ?? ''), failed, refresh, set }),
-    [status, blocked, readFor, uid, failed, refresh, set],
+    () => ({ ...status, blocked, ready: readFor === (uid ?? ''), failed, refresh, set, setNotify }),
+    [status, blocked, readFor, uid, failed, refresh, set, setNotify],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

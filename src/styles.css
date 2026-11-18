@@ -933,7 +933,8 @@ html[lang='en'] .logo-name {
   padding-top: 4px;
   border-top: 1px dashed #e3e6eb;
 }
-.receipt-import .ri-amt {
+.receipt-import .ri-amt,
+.receipt-import .ri-no {
   white-space: nowrap;
 }
 .receipt-import .ri-dropped {
@@ -1417,6 +1418,27 @@ html[lang='en'] .logo-name {
 /* 说明框下面的字数和弹窗底下的按钮隔开一点 */
 .maint-note-input {
   margin-bottom: 18px;
+}
+/* 45 维护的邮件通知：开关一行，下面写这一次的邮件发得怎么样 */
+.maint-mail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #e5e7eb;
+}
+.maint-mail-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.maint-mail-label {
+  font-weight: 500;
+}
+.maint-mail-status {
+  margin-top: 4px;
+}
+.maint-note-mail {
+  margin: -10px 0 12px;
 }
 
 /* ---------- 批量修改支票（按序号选一叠，勾上的项才改） ---------- */

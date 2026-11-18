@@ -6,6 +6,9 @@
 //          发送时间在数据库里定（20_todo_digest.sql 的 notify_next_slot）；这里邮件结尾写的“工作日上午 10 点、下午 4 点”要和它一致。
 // - test：登录的人给自己发一封测试邮件，看收不收得到（页头“邮件提醒”里的“发一封测试邮件”）。
 // - check：也要带口令。只连一下发信服务器、试试发信邮箱能不能登录，不发邮件（排查用，从数据库里叫）。
+// - maint：也要带口令（45）。管理员开始 / 结束维护的那一下，数据库马上叫一次（没发出去的，每分钟的定时任务再叫）：
+//          从数据库取要发的维护通知（maintenance_mail_claim：一人一封，开始的带说明，结束的带开始和结束时间），
+//          发出去再一条条报结果（maintenance_mail_done）。只发维护通知，维护期间攒着的待办提醒不碰。
 //
 // 用 SMTP 发信，默认 Gmail（smtp.gmail.com 的 465 端口；Supabase 不让连 25 和 587 端口）。
 // 密钥（Supabase → Edge Functions → Secrets）：
@@ -14,7 +17,7 @@
 //   SMTP_HOST、SMTP_PORT（可选，默认 smtp.gmail.com、465；用公司邮箱时按邮箱服务商给的填，比如腾讯企业邮 smtp.exmail.qq.com、465）
 //   MAIL_FROM_NAME（可选，发件人名字，默认“业财管理 Sales & Finance”）
 //   SITE_URL（可选，邮件里按钮打开的网址，默认 https://rome-ye33.github.io/fetpower/）
-// 部署时 verify_jwt = false：flush、check 用口令校验，test 自己校验登录。服务端密钥只在 Supabase 服务器上用，不会进浏览器。
+// 部署时 verify_jwt = false：flush、check、maint 用口令校验，test 自己校验登录。服务端密钥只在 Supabase 服务器上用，不会进浏览器。
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import nodemailer from 'npm:nodemailer@7'
 
@@ -232,6 +235,98 @@ ${itemsHtml}<a href="${esc(link)}" style="display:inline-block;background:#1d4ed
   return { subject, text: textBody, html }
 }
 
+// ---------------------------------------------------------------- 维护通知（45）
+// 数据库给的：一封维护通知。event = start 开始维护（带管理员写的说明）/ end 结束维护（带结束时间）
+type MaintRow = {
+  id: number
+  event: string
+  to_email: string | null
+  to_name: string | null
+  lang: string | null
+  note: string | null
+  since: string | null
+  until: string | null
+}
+
+/** 加纳时间（一直是 UTC+0、不调夏令时）：日期、几点几分 */
+function ghana(iso: string | null): { date: string; time: string } | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const s = d.toISOString() // 2026-11-18T14:51:17.900Z
+  return { date: s.slice(0, 10), time: s.slice(11, 16) }
+}
+
+/** 维护通知：开始的（系统暂时用不了，带说明）、结束的（可以用了，带起止时间和打开网站的按钮）。name 空的就不称呼名字 */
+function composeMaint(r: MaintRow): Mail {
+  const en = r.lang === 'en'
+  const who = r.to_name ? oneLine(r.to_name) : ''
+  const greeting = en ? (who ? `Hello ${who},` : 'Hello,') : who ? `${who}，你好：` : '你好：'
+  const note = (r.note ?? '').trim()
+  const from = ghana(r.since)
+  const to = ghana(r.until)
+  const start = r.event !== 'end'
+  let subject: string
+  let line: string
+  let after: string
+  let button: string | null = null
+  if (start) {
+    subject = en ? '[Sales & Finance] Under maintenance: the system is unavailable for now' : '【业财管理】系统维护中，暂时用不了'
+    line = en
+      ? from
+        ? `Sales & Finance has been under maintenance since ${from.date} ${from.time} (Ghana time). Until it is over, you cannot sign in or use the system.`
+        : 'Sales & Finance is under maintenance. Until it is over, you cannot sign in or use the system.'
+      : from
+        ? `业财管理系统从 ${from.date} ${from.time}（加纳时间）开始维护，这段时间登录不了、也用不了。`
+        : '业财管理系统正在维护，这段时间登录不了、也用不了。'
+    after = en
+      ? 'We will email you again when maintenance is over. Pages that are already open show “Under maintenance” and come back by themselves afterwards, so you don\'t need to sign in again.'
+      : '维护结束后会再发一封邮件告诉你。已经打开的网页会显示“系统维护中”，维护结束后自动恢复，不用重新登录。'
+  } else {
+    subject = en ? '[Sales & Finance] Maintenance is over: you can use the system again' : '【业财管理】维护结束，可以正常使用了'
+    const range = from && to ? `${from.date} ${from.time}${en ? ' to ' : ' 到 '}${to.date === from.date ? '' : to.date + ' '}${to.time}` : ''
+    line = en
+      ? range
+        ? `Maintenance of Sales & Finance is over (${range}, Ghana time). You can sign in and use the system as usual.`
+        : 'Maintenance of Sales & Finance is over. You can sign in and use the system as usual.'
+      : range
+        ? `业财管理系统的维护已经结束（${range}，加纳时间），现在可以正常登录使用了。`
+        : '业财管理系统的维护已经结束，现在可以正常登录使用了。'
+    after = en ? 'Pages that are already open come back by themselves, so you don\'t need to sign in again.' : '已经打开的网页会自动恢复，不用重新登录。'
+    button = en ? 'Open Sales & Finance' : '打开业财管理'
+  }
+  const noteLabel = en ? 'Note from the admin:' : '管理员的说明：'
+  const foot = en ? 'This is a maintenance notice sent automatically. Please do not reply.' : '这是系统维护通知，由系统自动发出，请不要回复。'
+  const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',Arial,sans-serif"
+  const noteHtml =
+    start && note
+      ? `<div style="margin:0 0 12px;padding:10px 14px;background:#fffaf0;border:1px solid #ffd591;border-radius:8px"><div style="font-size:13px;color:#6b7280;margin:0 0 4px">${esc(noteLabel)}</div><div style="white-space:pre-wrap">${esc(note)}</div></div>\n`
+      : ''
+  const buttonHtml = button
+    ? `<a href="${esc(SITE)}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 24px;border-radius:6px">${esc(button)}</a>\n`
+    : ''
+  const html = `<!doctype html>
+<html lang="${en ? 'en' : 'zh-CN'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:#f3f6fb">
+<div style="max-width:560px;margin:0 auto;padding:24px 16px;font-family:${font};font-size:15px;line-height:1.6;color:#1f2937">
+<div style="margin:0 0 12px;font-size:16px;font-weight:600;color:#1d4ed8">${esc(en ? 'Sales & Finance' : '业财管理')}</div>
+<div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;padding:24px">
+<p style="margin:0 0 12px">${esc(greeting)}</p>
+<p style="margin:0 0 12px">${esc(line)}</p>
+${noteHtml}<p style="margin:0 0 ${button ? 20 : 0}px">${esc(after)}</p>
+${buttonHtml}</div>
+<p style="margin:16px 0 0;font-size:12px;color:#6b7280">${esc(foot)}</p>
+</div>
+</body></html>`
+  const textBody =
+    `${greeting}\n\n${line}\n\n` +
+    (start && note ? `${noteLabel}${en ? ' ' : ''}${note}\n\n` : '') +
+    `${after}\n\n` +
+    (button ? `${button}${en ? ': ' : '：'}${SITE}\n\n` : '') +
+    `${foot}\n`
+  return { subject, text: textBody, html }
+}
+
 // ---------------------------------------------------------------- 发信
 const NET_CODES = new Set(['ECONNECTION', 'ETIMEDOUT', 'ESOCKET', 'EDNS', 'ETLS', 'EPROTOCOL', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EHOSTUNREACH'])
 
@@ -321,6 +416,48 @@ async function flush(): Promise<Response> {
   return reply(200, { ok: true, ...count })
 }
 
+// 维护通知（45）：一封一封发，一封一封报结果
+async function maintDone(id: number, res: Result) {
+  const done = await db.rpc('maintenance_mail_done', {
+    p_id: id,
+    p_status: res.status,
+    p_message_id: res.status === 'sent' ? res.id : null, // 邮件的 Message-ID
+    p_error: res.status === 'sent' ? null : res.error,
+  })
+  if (done.error) console.error('maintenance_mail_done', id, done.error.message)
+}
+
+async function maint(): Promise<Response> {
+  const count = { sent: 0, retry: 0, failed: 0, skipped: 0 }
+  const started = Date.now()
+  let t: Transport | null = null
+  try {
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      const { data, error } = await db.rpc('maintenance_mail_claim', { p_limit: BATCH })
+      if (error) return reply(500, { error: error.message })
+      const rows = (data ?? []) as MaintRow[]
+      let stopped: Failure | null = null
+      for (const r of rows) {
+        let res: Result
+        if (stopped) res = stopped // 登录不上、连不上：这一批剩下的不去试，一起等下次
+        else if (!configured()) res = { status: 'skipped', error: '邮件提醒还没配置好' }
+        else if (!r.to_email) res = { status: 'skipped', error: '没有邮箱' }
+        else {
+          t ??= transport(true)
+          res = await sendMail(t, r.to_email, composeMaint(r))
+          if (res.status !== 'sent' && res.stop) stopped = res
+        }
+        await maintDone(r.id, res)
+        count[res.status]++
+      }
+      if (stopped || rows.length < BATCH || Date.now() - started > TIME_BUDGET) break
+    }
+  } finally {
+    t?.close()
+  }
+  return reply(200, { ok: true, ...count })
+}
+
 // 给自己发一封测试邮件
 async function test(req: Request): Promise<Response> {
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
@@ -374,8 +511,9 @@ Deno.serve(async (req) => {
     // 没有内容就当空的
   }
   try {
-    if (body.action === 'flush' || body.action === 'check') {
+    if (body.action === 'flush' || body.action === 'check' || body.action === 'maint') {
       if (!(await flushAllowed(req.headers.get('x-notify-secret') ?? ''))) return reply(401, { error: '口令不对' })
+      if (body.action === 'maint') return await maint()
       return body.action === 'flush' ? await flush() : await check()
     }
     if (body.action === 'test') return await test(req)

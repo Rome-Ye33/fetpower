@@ -1649,6 +1649,32 @@ const UI: Record<string, string> = {
   "已到账的不会删。删掉的支票不能恢复，重新导入表格可以再导进来。":
     "Cheques already matched to a receipt are kept. Deleted cheques cannot be restored, but importing the sheet again brings them back.",
   "已删除 {n} 张支票": "{n} cheques deleted",
+  // 批量修改支票（按序号选一叠）
+  "修改选中 {n} 张": "Edit {n} selected",
+  "批量修改 {n} 张支票": "Edit {n} cheques together",
+  "勾上的项才改，没勾的每张票保留自己原来的。": "Only ticked fields are changed; every other field keeps each cheque's own value.",
+  "按序号改一叠：先在台账「序号」那一列搜合同序号，再点表头的勾全选，然后到这里改。":
+    "To edit one contract's stack: search the contract no. in the Seq. column, tick the header checkbox to select them all, then come here.",
+  "先勾要改的项": "Tick what to change first",
+  "这几张票不是同一个客户的，要改车请连客户一起勾上": "These cheques are not all for one customer; to change the vehicles, tick Customer as well",
+  "请选到期日期": "Choose the due date",
+  "已改 {n} 张支票": "{n} cheques changed",
+  "先选客户": "Choose the customer first",
+  "搜大架号": "Search by VIN",
+  "选中的每张票都改成这几台（整单几台车的分期票就是这样）": "Every selected cheque gets these vehicles (that's how a multi-vehicle order's instalments work)",
+  "币种和金额": "Currency and amount",
+  "选中的里有 {n} 张已到账的（{list}），金额、币种按到账为准，改不了":
+    "{n} of the selected are already cleared ({list}); their amount and currency follow the receipt and cannot be changed",
+  "每张都改成这个数；空着就是空白支票": "Every cheque gets this amount; leave it empty for blank cheques",
+  "从这天起每月一张": "Monthly from this date",
+  "都是这一天": "All on this date",
+  "按下面的顺序一张一个月往后排": "One month apart, in the order listed below",
+  "清空就是去掉序号": "Clear it to remove the contract no.",
+  "按下面的顺序重排：填 1 就是第 1、2、3……期": "Renumber in the order listed below: enter 1 and they become instalments 1, 2, 3…",
+  "选中的是 {n} 张": "{n} cheques selected",
+  "清空就是去掉备注": "Clear it to remove the note",
+  "这 {n} 张（按顺序）": "These {n}, in order",
+  "（第 {n} 期）": " (instalment {n})",
   "已删除 {n} 张；{m} 张没删：{list}（已到账的要先取消和到账的关联）":
     "{n} deleted; {m} kept: {list} (unlink the receipt first to delete a matched cheque)",
   "用途": "Purpose",

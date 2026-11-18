@@ -96,8 +96,19 @@ export function daysLeftThisWeek(today: string = todayAccra()): number {
   return 7 - (wd === 0 ? 7 : wd)
 }
 
+/**
+ * 排提醒用的天数：还没存的票定了「计划存票日期」就按计划日期算，没定的按到期日期算。
+ * Rome 2026-11-18 17:52「我希望定好存票日后，存票日期当天支票会出现在今天到期列表」：
+ * 过期的票定了将来某天的计划，先从「到期还没存」退出来，到计划那天进「今天到期」，过了还没存再回去。
+ * 「到期日期」那一列显示的还是真正的到期日和「过了 N 天」，不走这里。
+ */
+export function daysToAct(c: Cheque, today: string = todayAccra()): number | null {
+  if (c.plan_date) return Math.round((Date.parse(c.plan_date + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 86400000)
+  return c.days_to_due ?? null
+}
+
 export function inAlert(c: Cheque, a: ChequeAlert): boolean {
-  const d = c.days_to_due
+  const d = daysToAct(c)
   switch (a) {
     case 'due_today':
       return OPEN.includes(c.status ?? '') && d === 0

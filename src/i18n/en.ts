@@ -401,6 +401,9 @@ const VALUES: Record<string, string> = {
   "不可见": "Hidden",
   "只看": "View only",
   "可编辑": "Can edit",
+  // 业务员的支票三档（44）
+  "只看自己的": "Own only",
+  "全部支票": "All cheques",
   "录到账、拆分、审核业务员提交、请业务员填写": "Enter receipts, allocate them, review salesperson submissions, ask a salesperson to fill in",
   "录支票、存票、退票、导入表格": "Enter cheques, deposit, mark bounced, import the sheet",
   "新增、修改、导入车辆，录期初、优惠折让": "Add, edit and import vehicles; enter opening balances and discounts",
@@ -559,16 +562,18 @@ const UI: Record<string, string> = {
     "Approvals still go by approval post: when it's their turn to approve, they can open, approve or return it from the Workbench even if the module is view only or hidden.",
   "从支票、银行流水生成到账，还要“到账录入”可编辑。客户在车辆、支票的录入框里也能直接新建。":
     "Creating a receipt from a cheque or a bank line also needs “Receipts” to be editable. Customers can also be created right from the vehicle and cheque forms.",
-  "蓝色的能改，灰色的只能看，没列出来的看不到（菜单里没有）。管理员全部能改。业务员默认只有工作台、提交到账、我的车辆、提成申请单，点“设置”可以再给他开「我的支票」（只看自己名下的）。":
-    "Blue can edit, grey is view-only, and anything not listed is hidden (not in the menu). Admins can edit everything. A salesperson gets only Workbench, Submit a receipt, My vehicles and Commission vouchers; use “Set” to also give them My cheques (view-only, their own).",
+  "蓝色的能改，灰色的只能看，没列出来的看不到（菜单里没有）。管理员全部能改。业务员默认只有工作台、提交到账、我的车辆、提成申请单，点“设置”可以再给他开支票：只看自己名下的，或者看公司全部的票（都只能看）。":
+    "Blue can edit, grey is view-only, and anything not listed is hidden (not in the menu). Admins can edit everything. A salesperson gets only Workbench, Submit a receipt, My vehicles and Commission vouchers; use “Set” to also give them cheques: their own only, or every cheque in the company (view-only either way).",
   "我的支票": "My cheques",
   "只看得到自己名下的": "Sees only their own",
-  "不可见：菜单里没有这一项。只看：能打开看，不能录入、修改、删除。":
-    "Hidden: not in the menu. View: can open and read, cannot add, edit or delete.",
-  "业务员只看得到自己名下的（客户或车是他的那些），别人的看不到。":
-    "A salesperson sees only their own (where the customer or the vehicle is theirs); other people's are not visible.",
-  "只看自己名下的支票：到期、存了没、到账了没；不能录入、修改、存票":
-    "View their own cheques only: due date, whether deposited, whether cleared; cannot add, edit or deposit",
+  "我的支票（只看）": "My cheques (view)",
+  "全部支票（只看）": "All cheques (view)",
+  "不可见：菜单里没有这一项。只看自己的：只看客户或车是他的那些票。全部支票：公司所有的票都看得到。":
+    "Hidden: not in the menu. Own only: only cheques where the customer or the vehicle is theirs. All cheques: every cheque in the company.",
+  "两档都只能看：不能录支票、修改、删除、存票、导入表格。别的地方不变，他的「我的车辆」「提交到账」还是只有自己名下的。":
+    "Both levels are view-only: no entering, editing, deleting, depositing or importing cheques. Nothing else changes: My vehicles and Submit a receipt still show only their own.",
+  "看支票：到期、存了没、到账了没、是谁的；不能录入、修改、存票":
+    "See cheques: due date, whether deposited, whether cleared, whose they are; cannot add, edit or deposit",
   "已注册，在上面账号那一行改": "Registered: change it on the account row above",
   "财务默认所有模块都能看、能改；要限制的，加入名单后在“模块权限”那一列点“设置”。":
     "Finance can see and edit every module by default. To restrict them, click “Set” in the Module permissions column after adding them.",

@@ -2,7 +2,8 @@ import type { Json } from './database.types'
 import type { AppRole } from './supabase'
 
 // ---------------------------------------------------------------- 财务的模块权限（数据库 31）
-// 每个财务账号、每个模块一档：不可见 / 只看 / 可编辑。管理员永远全部可编辑；业务员不用这个（只看自己名下的）。
+// 每个财务账号、每个模块一档：不可见 / 只看 / 可编辑。管理员永远全部可编辑。
+// 业务员本来不用这个，2026-11-18 起「支票管理」也能开给选中的业务员（只看，而且数据库本来就只给他自己名下的票）。
 // 财务的 perms 是空的 = 没设过 = 全部可编辑（和以前一样）；设过以后没写到的模块按“不可见”算。
 // 数据库把关“修改”（没有编辑权限的绕过网页也改不了）；“不可见 / 只看”由网页控制菜单、页面和按钮。
 export type PermModule = 'receipts' | 'journal' | 'cash' | 'cheques' | 'vehicles' | 'commission' | 'reconcile' | 'base'
@@ -30,13 +31,28 @@ export const PERM_LEVELS: { key: PermLevel; label: string }[] = [
   { key: 'edit', label: '可编辑' },
 ]
 
-/** 数据库里存的 perms → 每个模块一档（空 = 没设过 = 全部可编辑；没写到的 = 不可见）。和 private.user_perm 一样算 */
+/** 业务员能开的模块：只有支票管理，而且最多「只看」。他看到的票数据库本来就只有自己名下的 */
+export const SALES_MODULES: PermModule[] = ['cheques']
+
+const levelIn = (perms: Json | null | undefined, m: PermModule): PermLevel => {
+  const v = typeof perms === 'object' && perms !== null && !Array.isArray(perms) ? perms[m] : undefined
+  return v === 'view' || v === 'edit' ? v : 'none'
+}
+
+/** 数据库里存的 perms → 每个模块一档（财务空着 = 没设过 = 全部可编辑；没写到的 = 不可见）。和 private.user_perm 一样算 */
 export function permOf(role: AppRole | null, perms: Json | null | undefined, m: PermModule): PermLevel {
   if (role === 'admin') return 'edit'
+  // 业务员：默认什么也看不到；管理员给他开过的模块只能「只看」，永远不给编辑
+  if (role === 'sales') return SALES_MODULES.includes(m) && levelIn(perms, m) !== 'none' ? 'view' : 'none'
   if (role !== 'finance') return 'none'
   if (perms === null || perms === undefined) return 'edit'
-  const v = typeof perms === 'object' && !Array.isArray(perms) ? perms[m] : undefined
-  return v === 'view' || v === 'edit' ? v : 'none'
+  return levelIn(perms, m)
+}
+
+/** 业务员存进数据库的样子：开了的模块写「只看」，一个都没开就存空 */
+export function storedSalesPerms(p: Perms): Record<string, PermLevel> | null {
+  const on = SALES_MODULES.filter((m) => p[m] === 'view' || p[m] === 'edit')
+  return on.length ? (Object.fromEntries(on.map((m) => [m, 'view' as PermLevel])) as Record<string, PermLevel>) : null
 }
 
 /** 存进数据库的样子：全部可编辑存空（= 不限制，以后加了新模块也能编辑），否则每个模块都写上 */

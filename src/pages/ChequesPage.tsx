@@ -1,8 +1,9 @@
-import { DeleteOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { App, Button, Input, Popconfirm, Select, Space, Table, Tag, Tooltip } from 'antd'
 import type { Key } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import ChequeBulkEdit from '../components/ChequeBulkEdit'
 import ChequeDetail from '../components/ChequeDetail'
 import ChequeEditor from '../components/ChequeEditor'
 import ChequeImport from '../components/ChequeImport'
@@ -47,6 +48,8 @@ export default function ChequesPage() {
   const [receipt, setReceipt] = useState<{ open: boolean; id: number | null; prefill: ReceiptPrefill | null }>({ open: false, id: null, prefill: null })
   const [selected, setSelected] = useState<number[]>([])
   const [deleting, setDeleting] = useState(false)
+  /** 批量修改（按序号选出一叠，一次改几项） */
+  const [bulkOpen, setBulkOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -347,6 +350,11 @@ export default function ChequesPage() {
         <Input.Search allowClear placeholder={t('支票号、客户、户名、大架号、合同序号')} style={{ width: 240 }} onSearch={setQ} />
         <Button icon={<ReloadOutlined />} onClick={() => void load()} />
         {chEdit && chosen.length > 0 && (
+          <Button icon={<EditOutlined />} onClick={() => setBulkOpen(true)} className="cheque-bulk-btn">
+            {t('修改选中 {n} 张', { n: chosen.length })}
+          </Button>
+        )}
+        {chEdit && chosen.length > 0 && (
           <Popconfirm
             title={t('删除选中的 {n} 张支票？', { n: chosen.length })}
             description={t('已到账的不会删。删掉的支票不能恢复，重新导入表格可以再导进来。')}
@@ -392,6 +400,17 @@ export default function ChequesPage() {
               }
             : undefined
         }
+      />
+      <ChequeBulkEdit
+        open={bulkOpen}
+        cheques={chosen}
+        onClose={(changed) => {
+          setBulkOpen(false)
+          if (changed) {
+            setSelected([])
+            void load()
+          }
+        }}
       />
       <ChequeEditor
         open={editor.open}

@@ -1418,3 +1418,21 @@ html[lang='en'] .logo-name {
 .maint-note-input {
   margin-bottom: 18px;
 }
+
+/* ---------- 批量修改支票（按序号选一叠，勾上的项才改） ---------- */
+.cheque-bulk-edit .bulk-fields td {
+  padding: 6px 8px !important;
+  vertical-align: top;
+}
+/* 没勾的项灰一点，一眼看出这次不改 */
+.cheque-bulk-edit .bulk-off {
+  opacity: 0.45;
+}
+.cheque-bulk-edit .bulk-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin-top: 4px;
+  max-height: 160px;
+  overflow: auto;
+}

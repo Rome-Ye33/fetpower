@@ -2124,6 +2124,7 @@ export type Database = {
       maintenance_status: { Args: never; Returns: Json }
       pair_line_entry: { Args: { p_entry_id: number; p_line_id: number }; Returns: Json }
       set_maintenance: { Args: { p_active: boolean; p_note?: string }; Returns: Json }
+      set_maintenance_notify: { Args: { p_on: boolean }; Returns: Json }
       fill_statement_lines: { Args: { p: Json; p_line_ids: number[] }; Returns: number }
       import_cheques: { Args: { p_rows: Json }; Returns: Json }
       import_vehicles: {

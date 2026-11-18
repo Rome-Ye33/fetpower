@@ -27,9 +27,11 @@ const OPEN_STATUSES: string[] = ['pending', 'confirming', 'deposited', 'bounced'
 export default function ChequesPage() {
   const t = useT()
   const { message } = App.useApp()
-  const { canEdit, canView } = useAuth()
+  const { canEdit, canView, role } = useAuth()
   /** 录、改、删、导入支票（“支票管理”可编辑）；只看的只能看台账和记录 */
   const chEdit = canEdit('cheques')
+  /** 业务员（管理员给他开过「我的支票」）：数据库只给他自己名下的票，所以业务员那一栏、那个筛选都不用了 */
+  const isSales = role === 'sales'
   const { accounts, salespersons } = useRefData()
   const [rows, setRows] = useState<Cheque[]>([])
   const [loading, setLoading] = useState(false)
@@ -225,7 +227,7 @@ export default function ChequesPage() {
       },
       ...textCol<Cheque>((c) => `${c.vins ?? c.vin ?? ''} ${c.models ?? c.model ?? ''}`),
     },
-    { title: t('业务员'), dataIndex: 'salesperson_name', width: 124, ellipsis: true, ...pickCol(rows, (c) => c.salesperson_name) },
+    ...(isSales ? [] : [{ title: t('业务员'), dataIndex: 'salesperson_name', width: 124, ellipsis: true, ...pickCol(rows, (c: Cheque) => c.salesperson_name) }]),
     { title: t('用途'), dataIndex: 'purpose', width: 90, render: (v: string) => t(v), ...pickCol(rows, (c) => c.purpose, t) },
     {
       title: t('金额'),
@@ -321,15 +323,17 @@ export default function ChequesPage() {
       </Space>
       <Space wrap className="filters">
         <Select style={{ width: 150 }} value={alert ? 'all' : status} disabled={!!alert} onChange={(v: StatusFilter) => setStatus(v)} options={statusOptions} />
-        <Select
-          allowClear
-          placeholder={t('业务员')}
-          style={{ width: 140 }}
-          showSearch={{ optionFilterProp: 'label' }}
-          value={salespersonId}
-          onChange={setSalespersonId}
-          options={salespersons.map((s) => ({ value: s.id, label: s.name }))}
-        />
+        {!isSales && (
+          <Select
+            allowClear
+            placeholder={t('业务员')}
+            style={{ width: 140 }}
+            showSearch={{ optionFilterProp: 'label' }}
+            value={salespersonId}
+            onChange={setSalespersonId}
+            options={salespersons.map((s) => ({ value: s.id, label: s.name }))}
+          />
+        )}
         <Select
           allowClear
           placeholder={t('存票账户')}

@@ -75,6 +75,8 @@ export default function App() {
   const uid = auth.session?.user.id ?? null
   const isSales = auth.role === 'sales'
   const { canView } = auth
+  // 业务员里「全部支票」的那种（数据库 44）：菜单写「支票管理」，不是「我的支票」
+  const allCheques = auth.perm('cheques') === 'all'
   // 待审核的到账提交：能改“到账录入”的人才审得了，只看的不提醒
   const pending = useSubmissionCount('pending', auth.canEdit('receipts'))
   const rejected = useSubmissionCount('rejected', isSales)
@@ -83,7 +85,7 @@ export default function App() {
   // 工作台：到账提交、提成单里等我处理的一共几件
   const todo = useTodoCount(!!auth.role)
   // 支票：到期还没存的 + 存了 3 天还没到账的
-  const chequeAlert = useChequeAlert(canView('cheques'))
+  const chequeAlert = useChequeAlert(auth.isStaff && canView('cheques'))
   // 银行流水还没填的（按分工：填收款的只算收进来的、填付款的只算付出去的）：管填流水的人才提醒
   const lineTodo = useLineTodo(canView('reconcile') && (auth.canEdit('reconcile') || auth.canEdit('journal')), auth.duty)
   // 业务员：自己名下还没定是哪台车的到账（大架号未锁定），在“提交到账”上用橙色数字提醒他告诉财务是哪台车
@@ -160,6 +162,10 @@ export default function App() {
         { key: '/submit', icon: <SendOutlined />, label: withCount(t('提交到账'), rejected, unlocked) },
         { key: '/vehicles', icon: <CarOutlined />, label: t('我的车辆') },
         { key: '/commission', icon: <FileDoneOutlined />, label: withCount(t('提成申请单'), voucherTodo) },
+        // 管理员在「用户与权限 → 模块权限」给他开过才有：只看自己名下的票，或者全部的票（这时就叫「支票管理」）
+        ...(canView('cheques')
+          ? [{ key: '/cheques', icon: <CreditCardOutlined />, label: allCheques ? t('支票管理') : t('我的支票') }]
+          : []),
       ]
 
   const selected = items.find((i) => location.pathname.startsWith(i.key))?.key ?? home

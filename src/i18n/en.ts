@@ -401,6 +401,9 @@ const VALUES: Record<string, string> = {
   "不可见": "Hidden",
   "只看": "View only",
   "可编辑": "Can edit",
+  // 业务员的支票三档（44）
+  "只看自己的": "Own only",
+  "全部支票": "All cheques",
   "录到账、拆分、审核业务员提交、请业务员填写": "Enter receipts, allocate them, review salesperson submissions, ask a salesperson to fill in",
   "录支票、存票、退票、导入表格": "Enter cheques, deposit, mark bounced, import the sheet",
   "新增、修改、导入车辆，录期初、优惠折让": "Add, edit and import vehicles; enter opening balances and discounts",
@@ -559,8 +562,18 @@ const UI: Record<string, string> = {
     "Approvals still go by approval post: when it's their turn to approve, they can open, approve or return it from the Workbench even if the module is view only or hidden.",
   "从支票、银行流水生成到账，还要“到账录入”可编辑。客户在车辆、支票的录入框里也能直接新建。":
     "Creating a receipt from a cheque or a bank line also needs “Receipts” to be editable. Customers can also be created right from the vehicle and cheque forms.",
-  "模块权限只对财务有用：蓝色的能改，灰色的只能看，没列出来的看不到（菜单里没有）。管理员全部能改；业务员只看得到自己名下的。":
-    "Module permissions only apply to finance: blue = can edit, grey = view only, not listed = hidden (not in the menu). Admins can edit everything; salespeople only see their own.",
+  "蓝色的能改，灰色的只能看，没列出来的看不到（菜单里没有）。管理员全部能改。业务员默认只有工作台、提交到账、我的车辆、提成申请单，点“设置”可以再给他开支票：只看自己名下的，或者看公司全部的票（都只能看）。":
+    "Blue can edit, grey is view-only, and anything not listed is hidden (not in the menu). Admins can edit everything. A salesperson gets only Workbench, Submit a receipt, My vehicles and Commission vouchers; use “Set” to also give them cheques: their own only, or every cheque in the company (view-only either way).",
+  "我的支票": "My cheques",
+  "只看得到自己名下的": "Sees only their own",
+  "我的支票（只看）": "My cheques (view)",
+  "全部支票（只看）": "All cheques (view)",
+  "不可见：菜单里没有这一项。只看自己的：只看客户或车是他的那些票。全部支票：公司所有的票都看得到。":
+    "Hidden: not in the menu. Own only: only cheques where the customer or the vehicle is theirs. All cheques: every cheque in the company.",
+  "两档都只能看：不能录支票、修改、删除、存票、导入表格。别的地方不变，他的「我的车辆」「提交到账」还是只有自己名下的。":
+    "Both levels are view-only: no entering, editing, deleting, depositing or importing cheques. Nothing else changes: My vehicles and Submit a receipt still show only their own.",
+  "看支票：到期、存了没、到账了没、是谁的；不能录入、修改、存票":
+    "See cheques: due date, whether deposited, whether cleared, whose they are; cannot add, edit or deposit",
   "已注册，在上面账号那一行改": "Registered: change it on the account row above",
   "财务默认所有模块都能看、能改；要限制的，加入名单后在“模块权限”那一列点“设置”。":
     "Finance can see and edit every module by default. To restrict them, click “Set” in the Module permissions column after adding them.",
@@ -1636,6 +1649,32 @@ const UI: Record<string, string> = {
   "已到账的不会删。删掉的支票不能恢复，重新导入表格可以再导进来。":
     "Cheques already matched to a receipt are kept. Deleted cheques cannot be restored, but importing the sheet again brings them back.",
   "已删除 {n} 张支票": "{n} cheques deleted",
+  // 批量修改支票（按序号选一叠）
+  "修改选中 {n} 张": "Edit {n} selected",
+  "批量修改 {n} 张支票": "Edit {n} cheques together",
+  "勾上的项才改，没勾的每张票保留自己原来的。": "Only ticked fields are changed; every other field keeps each cheque's own value.",
+  "按序号改一叠：先在台账「序号」那一列搜合同序号，再点表头的勾全选，然后到这里改。":
+    "To edit one contract's stack: search the contract no. in the Seq. column, tick the header checkbox to select them all, then come here.",
+  "先勾要改的项": "Tick what to change first",
+  "这几张票不是同一个客户的，要改车请连客户一起勾上": "These cheques are not all for one customer; to change the vehicles, tick Customer as well",
+  "请选到期日期": "Choose the due date",
+  "已改 {n} 张支票": "{n} cheques changed",
+  "先选客户": "Choose the customer first",
+  "搜大架号": "Search by VIN",
+  "选中的每张票都改成这几台（整单几台车的分期票就是这样）": "Every selected cheque gets these vehicles (that's how a multi-vehicle order's instalments work)",
+  "币种和金额": "Currency and amount",
+  "选中的里有 {n} 张已到账的（{list}），金额、币种按到账为准，改不了":
+    "{n} of the selected are already cleared ({list}); their amount and currency follow the receipt and cannot be changed",
+  "每张都改成这个数；空着就是空白支票": "Every cheque gets this amount; leave it empty for blank cheques",
+  "从这天起每月一张": "Monthly from this date",
+  "都是这一天": "All on this date",
+  "按下面的顺序一张一个月往后排": "One month apart, in the order listed below",
+  "清空就是去掉序号": "Clear it to remove the contract no.",
+  "按下面的顺序重排：填 1 就是第 1、2、3……期": "Renumber in the order listed below: enter 1 and they become instalments 1, 2, 3…",
+  "选中的是 {n} 张": "{n} cheques selected",
+  "清空就是去掉备注": "Clear it to remove the note",
+  "这 {n} 张（按顺序）": "These {n}, in order",
+  "（第 {n} 期）": " (instalment {n})",
   "已删除 {n} 张；{m} 张没删：{list}（已到账的要先取消和到账的关联）":
     "{n} deleted; {m} kept: {list} (unlink the receipt first to delete a matched cheque)",
   "用途": "Purpose",

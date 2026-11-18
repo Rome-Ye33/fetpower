@@ -1,8 +1,9 @@
-import { DeleteOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { App, Button, Input, Popconfirm, Select, Space, Table, Tag, Tooltip } from 'antd'
 import type { Key } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import ChequeBulkEdit from '../components/ChequeBulkEdit'
 import ChequeDetail from '../components/ChequeDetail'
 import ChequeEditor from '../components/ChequeEditor'
 import ChequeImport from '../components/ChequeImport'
@@ -27,9 +28,12 @@ const OPEN_STATUSES: string[] = ['pending', 'confirming', 'deposited', 'bounced'
 export default function ChequesPage() {
   const t = useT()
   const { message } = App.useApp()
-  const { canEdit, canView } = useAuth()
+  const { canEdit, canView, perm, role } = useAuth()
   /** 录、改、删、导入支票（“支票管理”可编辑）；只看的只能看台账和记录 */
   const chEdit = canEdit('cheques')
+  /** 业务员开的是「只看自己的」：数据库只给他自己名下的票，所以业务员那一栏、那个筛选都不用了
+   *（开「全部支票」的业务员和财务一样，要看是谁的票） */
+  const ownOnly = role === 'sales' && perm('cheques') !== 'all'
   const { accounts, salespersons } = useRefData()
   const [rows, setRows] = useState<Cheque[]>([])
   const [loading, setLoading] = useState(false)
@@ -44,6 +48,8 @@ export default function ChequesPage() {
   const [receipt, setReceipt] = useState<{ open: boolean; id: number | null; prefill: ReceiptPrefill | null }>({ open: false, id: null, prefill: null })
   const [selected, setSelected] = useState<number[]>([])
   const [deleting, setDeleting] = useState(false)
+  /** 批量修改（按序号选出一叠，一次改几项） */
+  const [bulkOpen, setBulkOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -225,7 +231,7 @@ export default function ChequesPage() {
       },
       ...textCol<Cheque>((c) => `${c.vins ?? c.vin ?? ''} ${c.models ?? c.model ?? ''}`),
     },
-    { title: t('业务员'), dataIndex: 'salesperson_name', width: 124, ellipsis: true, ...pickCol(rows, (c) => c.salesperson_name) },
+    ...(ownOnly ? [] : [{ title: t('业务员'), dataIndex: 'salesperson_name', width: 124, ellipsis: true, ...pickCol(rows, (c: Cheque) => c.salesperson_name) }]),
     { title: t('用途'), dataIndex: 'purpose', width: 90, render: (v: string) => t(v), ...pickCol(rows, (c) => c.purpose, t) },
     {
       title: t('金额'),
@@ -321,15 +327,17 @@ export default function ChequesPage() {
       </Space>
       <Space wrap className="filters">
         <Select style={{ width: 150 }} value={alert ? 'all' : status} disabled={!!alert} onChange={(v: StatusFilter) => setStatus(v)} options={statusOptions} />
-        <Select
-          allowClear
-          placeholder={t('业务员')}
-          style={{ width: 140 }}
-          showSearch={{ optionFilterProp: 'label' }}
-          value={salespersonId}
-          onChange={setSalespersonId}
-          options={salespersons.map((s) => ({ value: s.id, label: s.name }))}
-        />
+        {!ownOnly && (
+          <Select
+            allowClear
+            placeholder={t('业务员')}
+            style={{ width: 140 }}
+            showSearch={{ optionFilterProp: 'label' }}
+            value={salespersonId}
+            onChange={setSalespersonId}
+            options={salespersons.map((s) => ({ value: s.id, label: s.name }))}
+          />
+        )}
         <Select
           allowClear
           placeholder={t('存票账户')}
@@ -341,6 +349,11 @@ export default function ChequesPage() {
         />
         <Input.Search allowClear placeholder={t('支票号、客户、户名、大架号、合同序号')} style={{ width: 240 }} onSearch={setQ} />
         <Button icon={<ReloadOutlined />} onClick={() => void load()} />
+        {chEdit && chosen.length > 0 && (
+          <Button icon={<EditOutlined />} onClick={() => setBulkOpen(true)} className="cheque-bulk-btn">
+            {t('修改选中 {n} 张', { n: chosen.length })}
+          </Button>
+        )}
         {chEdit && chosen.length > 0 && (
           <Popconfirm
             title={t('删除选中的 {n} 张支票？', { n: chosen.length })}
@@ -387,6 +400,17 @@ export default function ChequesPage() {
               }
             : undefined
         }
+      />
+      <ChequeBulkEdit
+        open={bulkOpen}
+        cheques={chosen}
+        onClose={(changed) => {
+          setBulkOpen(false)
+          if (changed) {
+            setSelected([])
+            void load()
+          }
+        }}
       />
       <ChequeEditor
         open={editor.open}

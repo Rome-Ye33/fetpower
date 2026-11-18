@@ -417,13 +417,13 @@ export default function UsersPage() {
             render: (_, p) => (
               <div className="perm-cell">
                 <PermSummary role={p.role} perms={p.perms} duty={p.journal_duty} />
-                {p.role === 'finance' && (
+                {(p.role === 'finance' || p.role === 'sales') && (
                   <Button
                     size="small"
                     type="link"
                     icon={<EditOutlined />}
                     className="perm-set"
-                    onClick={() => setPermFor({ kind: 'profile', id: p.id, name: personName(p), perms: p.perms, duty: p.journal_duty })}
+                    onClick={() => setPermFor({ kind: 'profile', id: p.id, name: personName(p), role: p.role, perms: p.perms, duty: p.journal_duty })}
                   >
                     {t('设置')}
                   </Button>
@@ -503,7 +503,7 @@ export default function UsersPage() {
         ]}
       />
       <div className="hint" style={{ marginBottom: 24 }}>
-        {t('模块权限只对财务有用：蓝色的能改，灰色的只能看，没列出来的看不到（菜单里没有）。管理员全部能改；业务员只看得到自己名下的。')}
+        {t('蓝色的能改，灰色的只能看，没列出来的看不到（菜单里没有）。管理员全部能改。业务员默认只有工作台、提交到账、我的车辆、提成申请单，点“设置”可以再给他开支票：只看自己名下的，或者看公司全部的票（都只能看）。')}
       </div>
       <Space wrap style={{ marginBottom: 8 }}>
         <Typography.Title level={5} style={{ margin: 0 }}>
@@ -548,19 +548,19 @@ export default function UsersPage() {
             width: 240,
             render: (_, i) =>
               registered.has(i.email) ? (
-                i.role === 'finance' ? (
+                i.role === 'finance' || i.role === 'sales' ? (
                   <span className="hint">{t('已注册，在上面账号那一行改')}</span>
                 ) : null
               ) : (
                 <div className="perm-cell">
                   <PermSummary role={i.role} perms={i.perms} duty={i.journal_duty} />
-                  {i.role === 'finance' && (
+                  {(i.role === 'finance' || i.role === 'sales') && (
                     <Button
                       size="small"
                       type="link"
                       icon={<EditOutlined />}
                       className="perm-set"
-                      onClick={() => setPermFor({ kind: 'invite', email: i.email, name: personName(i), perms: i.perms, duty: i.journal_duty })}
+                      onClick={() => setPermFor({ kind: 'invite', email: i.email, name: personName(i), role: i.role, perms: i.perms, duty: i.journal_duty })}
                     >
                       {t('设置')}
                     </Button>

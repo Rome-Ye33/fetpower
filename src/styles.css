@@ -933,7 +933,8 @@ html[lang='en'] .logo-name {
   padding-top: 4px;
   border-top: 1px dashed #e3e6eb;
 }
-.receipt-import .ri-amt {
+.receipt-import .ri-amt,
+.receipt-import .ri-no {
   white-space: nowrap;
 }
 .receipt-import .ri-dropped {

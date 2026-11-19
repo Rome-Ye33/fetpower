@@ -1,4 +1,4 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { App, Button, Input, Popconfirm, Select, Space, Table, Tag, Tooltip } from 'antd'
 import type { Key } from 'react'
 import type { ColumnsType } from 'antd/es/table'
@@ -10,7 +10,20 @@ import ChequeImport from '../components/ChequeImport'
 import ReceiptEditor from '../components/ReceiptEditor'
 import type { ReceiptPrefill } from '../components/ReceiptEditor'
 import { useAuth } from '../lib/auth'
-import { CHEQUE_ALERT_LABEL, CHEQUE_ALERTS, CHEQUE_STATUS_COLOR, CHEQUE_STATUS_LABEL, CHEQUE_STATUSES, chequeStatus, chequeVehicleIds, chequeVins, inAlert, notifyChequesChanged } from '../lib/cheques'
+import {
+  CHEQUE_ALERT_LABEL,
+  CHEQUE_ALERTS,
+  CHEQUE_STATUS_COLOR,
+  CHEQUE_STATUS_LABEL,
+  CHEQUE_STATUSES,
+  chequeStatus,
+  chequeVehicleIds,
+  chequeVins,
+  inAlert,
+  notifyChequesChanged,
+  printDepositForm,
+  waitingDeposit,
+} from '../lib/cheques'
 import type { Cheque, ChequeAlert, ChequeStatus } from '../lib/cheques'
 import { colsWidth, pickCol, textCol } from '../lib/colFilter'
 import { errorText } from '../lib/errors'
@@ -122,6 +135,8 @@ export default function ChequesPage() {
 
   // 批量删除：按列表上看得见的选中项算；已到账的不删（数据库的删除策略也拦着）
   const chosen = shown.filter((c) => selected.includes(c.id as number))
+  /** 存票审批单只放还没存的（待存 / 等业务确认）：勾中的里面已存、已到账这些不算 */
+  const toDeposit = chosen.filter(waitingDeposit)
   /** 详情里的「改这一批」：同一个客户、同一个合同序号的所有支票（不看当前的筛选，整批都要） */
   const stackOf = (c: Cheque) =>
     c.contract_no ? rows.filter((x) => x.contract_no === c.contract_no && x.customer_id === c.customer_id) : [c]
@@ -352,6 +367,11 @@ export default function ChequesPage() {
         />
         <Input.Search allowClear placeholder={t('支票号、客户、户名、大架号、合同序号')} style={{ width: 240 }} onSearch={setQ} />
         <Button icon={<ReloadOutlined />} onClick={() => void load()} />
+        {chEdit && toDeposit.length > 0 && (
+          <Button icon={<PrinterOutlined />} onClick={() => printDepositForm(toDeposit.map((c) => c.id as number))} className="cheque-deposit-print">
+            {t('打印存票审批单（{n} 张）', { n: toDeposit.length })}
+          </Button>
+        )}
         {chEdit && chosen.length > 0 && (
           <Button icon={<EditOutlined />} onClick={() => setBulk(chosen)} className="cheque-bulk-btn">
             {t('修改选中 {n} 张', { n: chosen.length })}

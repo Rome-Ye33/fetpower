@@ -41,6 +41,7 @@ const UsersPage = lazy(() => import('./pages/UsersPage'))
 const SubmitPage = lazy(() => import('./pages/SubmitPage'))
 const CommissionPage = lazy(() => import('./pages/CommissionPage'))
 const CommissionPrintPage = lazy(() => import('./pages/CommissionPrintPage'))
+const ChequeDepositPrintPage = lazy(() => import('./pages/ChequeDepositPrintPage'))
 const WorkbenchPage = lazy(() => import('./pages/WorkbenchPage'))
 
 const { Sider, Header, Content } = Layout
@@ -130,6 +131,7 @@ export default function App() {
       <Suspense fallback={<FullSpin />}>
         <Routes>
           <Route path="/print/commission/:id" element={<CommissionPrintPage />} />
+          <Route path="/print/cheque-deposit" element={<ChequeDepositPrintPage />} />
           <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
       </Suspense>

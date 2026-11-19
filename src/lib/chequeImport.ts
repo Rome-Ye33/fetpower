@@ -42,6 +42,29 @@ export type ChequeImportRow = {
 }
 
 const VIN_RE = /[A-HJ-NPR-Z0-9]{17}/g
+/** 写在「大架号：」「VIN号：」后面的编号：机器、挂车的不一定是 17 位（压路机 YZ1520CG0866、叉车 A300-52010KK13456） */
+const VIN_LABEL_RE = /(?:大架号|车架号|底盘号|VIN号?)[ \t]*[：:]?[ \t]*([A-Z0-9][A-Z0-9-]{5,})/g
+
+/**
+ * 合同备注里的大架号，按在备注里出现的先后（第一台就是支票的第一台车）、去掉重复的。
+ * - 17 位的：按空格、标点、汉字切开一段一段找。以前是先把空格全去掉再找，「BOSS LMGAF1S5XS1011581」
+ *   会粘成「…SSLMGAF1S5XS10115」认错，公司名「EJT MENSCH URBAN LTD」也会被当成大架号。
+ * - 不是 17 位的机器编号：只认写在「大架号：」「VIN号：」后面、字母数字都有的。
+ */
+export function findVins(note: string): string[] {
+  const up = note.toUpperCase()
+  const hits: { at: number; vin: string }[] = []
+  for (const tok of up.matchAll(/[A-Z0-9]+/g)) {
+    for (const m of tok[0].matchAll(VIN_RE)) hits.push({ at: tok.index + m.index, vin: m[0] })
+  }
+  for (const m of up.matchAll(VIN_LABEL_RE)) {
+    const vin = m[1].replace(/-+$/, '')
+    if (/[A-Z]/.test(vin) && /[0-9]/.test(vin)) hits.push({ at: m.index + m[0].length - m[1].length, vin })
+  }
+  hits.sort((a, b) => a.at - b.at)
+  return [...new Set(hits.map((h) => h.vin))]
+}
+const sameName = (a: string, b: string) => a.toUpperCase().replace(/\s+/g, ' ') === b.toUpperCase().replace(/\s+/g, ' ')
 const clean = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim()
 const cell = (r: unknown[], i: number) => (i < r.length ? r[i] : '')
 const yes = (v: unknown) => clean(v) === '是'
@@ -159,19 +182,27 @@ export function parseMainSheet(rows: unknown[][], memo: Map<string, Memo>, accou
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i]
     const c = clean(cell(r, iCust))
-    if (iSeq >= 0 && clean(cell(r, iSeq))) seq = clean(cell(r, iSeq))
-    if (iQty >= 0 && toNumber(cell(r, iQty)) != null) qty = toNumber(cell(r, iQty))
-    if (c) {
+    const ownSeq = iSeq >= 0 ? clean(cell(r, iSeq)) : ''
+    const ownQty = iQty >= 0 ? toNumber(cell(r, iQty)) : null
+    // 新的一份合同：客户换了，或者序号换了。合同下面的支票行常常把客户名（有时连序号）又写一遍，
+    // 那还是同一份合同：大架号（备注）、业务员、分期款/月要接着用合同那一行的（以前这里会被清空，车就丢了）
+    const newContract = !!c && (!sameName(c, cust) || (!!ownSeq && ownSeq !== seq))
+    if (ownSeq) seq = ownSeq
+    if (newContract) {
       cust = c
       name = clean(cell(r, iName)) || cust
       note = String(cell(r, iNote) ?? '')
       sp = clean(cell(r, iSp))
       inst = toNumber(cell(r, iInst))
+      // 支票数量只算这份合同自己的：没写就空着（以前会接着用上一份合同的，没写的合同都成了「共 9 期」）
+      qty = ownQty
     } else {
-      // 合同下面的支票行：客户空着时沿用上面的；有自己的备注、业务员就用自己的
+      // 同一份合同下面的支票行：有自己的支票名称、备注、业务员、分期款就用自己的，没有就沿用合同那一行的
+      if (clean(cell(r, iName))) name = clean(cell(r, iName))
       if (clean(cell(r, iNote))) note = String(cell(r, iNote))
       if (clean(cell(r, iSp))) sp = clean(cell(r, iSp))
       if (toNumber(cell(r, iInst)) != null) inst = toNumber(cell(r, iInst))
+      if (ownQty != null) qty = ownQty
     }
     const no = clean(cell(r, iNo))
     if (!no || !cust) continue
@@ -179,7 +210,7 @@ export function parseMainSheet(rows: unknown[][], memo: Map<string, Memo>, accou
     const f = clean(cell(r, iF))
     const reported = yes(cell(r, iRep))
     const deposited = yes(cell(r, iDep))
-    const vins = [...new Set((note.toUpperCase().replace(/\s/g, '').match(VIN_RE) ?? []))]
+    const vins = findVins(note)
     const amountGhs = toNumber(cell(r, iAmt))
     const amountUsd = iUsd >= 0 ? toNumber(cell(r, iUsd)) : null
     const currency: 'GHS' | 'USD' = amountGhs == null && amountUsd != null ? 'USD' : 'GHS'
@@ -261,9 +292,11 @@ function numberInstallments(rows: ChequeImportRow[]) {
   const groups = new Map<string, ChequeImportRow[]>()
   for (const r of rows) {
     if (!r.contract_no) continue
-    const g = groups.get(r.contract_no)
+    // 序号 + 客户：表里偶尔有两份合同写了同一个序号（客户不一样），不能算成一份合同的期数
+    const key = `${r.contract_no}|${r.customer_name.toUpperCase().replace(/\s+/g, ' ')}`
+    const g = groups.get(key)
     if (g) g.push(r)
-    else groups.set(r.contract_no, [r])
+    else groups.set(key, [r])
   }
   for (const g of groups.values()) {
     g.sort((a, b) => a.row - b.row)

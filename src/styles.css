@@ -714,12 +714,29 @@ html[lang='en'] .logo-name {
 .cdf-table tr {
   break-inside: avoid;
 }
+/* 九栏挤在 190mm 里：表身小一号，日期、金额不折行 */
+.cdf-table td {
+  font-size: 10px;
+}
+.cdf-table td.cdf-nowrap {
+  white-space: nowrap;
+}
+/* 下面那行小字（计划存票日期、每期美元）放不下可以折行，不压到旁边一栏 */
+.cdf-table td.cdf-nowrap .cdf-sub {
+  white-space: normal;
+}
+.cdf-table .cv-vin {
+  font-size: 9px;
+}
+/* 每一行留出手写的高度（业务部确认金额、情况说明） */
+.cdf-table tr.cdf-row td {
+  height: 32px;
+}
 .cdf-sub {
-  font-size: 9.5px;
+  font-size: 9px;
 }
 /* 空白支票：最后一栏留一格给业务部手写金额，左上角印币种 */
 .cdf-table td.cdf-confirm {
-  height: 34px;
   vertical-align: top;
 }
 .cdf-cur {

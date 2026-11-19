@@ -13,6 +13,7 @@ import { LangProvider, useI18n } from './lib/i18n'
 import { MaintenanceGate, MaintenanceProvider } from './lib/maintenance'
 import { captureGo } from './lib/notify'
 import { RefDataProvider } from './lib/refdata'
+import { reloadOnce } from './lib/updateReload'
 import './styles.css'
 
 // 配色：深蓝侧边栏、蓝色主色、浅灰底上放白色页面；styles.css 里是同一套颜色
@@ -64,6 +65,11 @@ function Themed({ children }: { children: ReactNode }) {
 
 // 邮件提醒里的“打开处理”带着 ?go=…：先记下来、从地址栏去掉，登录好以后再打开
 captureGo()
+
+// 网站更新以后，还开着的旧网页打开别的菜单时拿不到换掉的文件：自动刷新一次换成新版（lib/updateReload.ts）
+window.addEventListener('vite:preloadError', () => {
+  reloadOnce()
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

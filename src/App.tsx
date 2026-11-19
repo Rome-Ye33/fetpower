@@ -20,6 +20,7 @@ import LangSwitch from './components/LangSwitch'
 import Logo from './components/Logo'
 import { MaintenanceBanner } from './components/Maintenance'
 import NotifySettings from './components/NotifySettings'
+import PageErrorBoundary from './components/PageErrorBoundary'
 import { ROLE_LABEL, useAuth } from './lib/auth'
 import { useChequeAlert } from './lib/cheques'
 import { useVoucherTodo } from './lib/commission'
@@ -128,13 +129,15 @@ export default function App() {
   // 打印页不带菜单
   if (location.pathname.startsWith('/print/')) {
     return (
-      <Suspense fallback={<FullSpin />}>
-        <Routes>
-          <Route path="/print/commission/:id" element={<CommissionPrintPage />} />
-          <Route path="/print/cheque-deposit" element={<ChequeDepositPrintPage />} />
-          <Route path="*" element={<Navigate to={home} replace />} />
-        </Routes>
-      </Suspense>
+      <PageErrorBoundary key={location.pathname}>
+        <Suspense fallback={<FullSpin />}>
+          <Routes>
+            <Route path="/print/commission/:id" element={<CommissionPrintPage />} />
+            <Route path="/print/cheque-deposit" element={<ChequeDepositPrintPage />} />
+            <Route path="*" element={<Navigate to={home} replace />} />
+          </Routes>
+        </Suspense>
+      </PageErrorBoundary>
     )
   }
 
@@ -229,23 +232,26 @@ export default function App() {
           {/* 维护开着时管理员每个页面顶上都有提示和“结束维护”，免得忘了关 */}
           <MaintenanceBanner />
           <div className="app-page">
-            <Suspense fallback={<FullSpin />}>
-              <Routes>
-                <Route path="/workbench" element={<WorkbenchPage />} />
-                {canView('receipts') && <Route path="/receipts" element={<ReceiptsPage />} />}
-                {/* 两本日记账同一个页面，key 不一样：切过去时重新开始（选着的账户、标签页不带过去） */}
-                {canView('journal') && <Route path="/journal" element={<JournalPage key="bank" scope="bank" />} />}
-                {canView('cash') && <Route path="/cash" element={<JournalPage key="cash" scope="cash" />} />}
-                {canView('cheques') && <Route path="/cheques" element={<ChequesPage />} />}
-                {isSales && <Route path="/submit" element={<SubmitPage />} />}
-                {(isSales || canView('vehicles')) && <Route path="/vehicles" element={<VehiclesPage />} />}
-                {(isSales || canView('commission')) && <Route path="/commission" element={<CommissionPage />} />}
-                {canView('reconcile') && <Route path="/reconcile" element={<ReconcilePage />} />}
-                {canView('base') && <Route path="/base" element={<BaseDataPage />} />}
-                {auth.isAdmin && <Route path="/users" element={<UsersPage />} />}
-                <Route path="*" element={<Navigate to={home} replace />} />
-              </Routes>
-            </Suspense>
+            {/* 页面出错（比如网站刚更新、拿不到换掉的文件）只在这一块提示，不再整页白掉；换一个菜单就重新来 */}
+            <PageErrorBoundary key={location.pathname}>
+              <Suspense fallback={<FullSpin />}>
+                <Routes>
+                  <Route path="/workbench" element={<WorkbenchPage />} />
+                  {canView('receipts') && <Route path="/receipts" element={<ReceiptsPage />} />}
+                  {/* 两本日记账同一个页面，key 不一样：切过去时重新开始（选着的账户、标签页不带过去） */}
+                  {canView('journal') && <Route path="/journal" element={<JournalPage key="bank" scope="bank" />} />}
+                  {canView('cash') && <Route path="/cash" element={<JournalPage key="cash" scope="cash" />} />}
+                  {canView('cheques') && <Route path="/cheques" element={<ChequesPage />} />}
+                  {isSales && <Route path="/submit" element={<SubmitPage />} />}
+                  {(isSales || canView('vehicles')) && <Route path="/vehicles" element={<VehiclesPage />} />}
+                  {(isSales || canView('commission')) && <Route path="/commission" element={<CommissionPage />} />}
+                  {canView('reconcile') && <Route path="/reconcile" element={<ReconcilePage />} />}
+                  {canView('base') && <Route path="/base" element={<BaseDataPage />} />}
+                  {auth.isAdmin && <Route path="/users" element={<UsersPage />} />}
+                  <Route path="*" element={<Navigate to={home} replace />} />
+                </Routes>
+              </Suspense>
+            </PageErrorBoundary>
           </div>
         </Content>
       </Layout>

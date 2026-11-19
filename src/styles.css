@@ -675,6 +675,79 @@ html[lang='en'] .logo-name {
 .cv-trail tr {
   break-inside: avoid;
 }
+/* 支票存票审批单（打印页，A4 竖版）：表头每页重复，一行不拆到两页，签字栏不拆开 */
+.cdf-skip {
+  max-width: 190mm;
+  margin: 0 auto 12px;
+}
+.cdf-head {
+  display: grid;
+  grid-template-columns: 22mm 1fr 22mm;
+  align-items: center;
+  text-align: center;
+}
+.cdf-logo {
+  display: block;
+  width: 20mm;
+  height: auto;
+}
+.cdf-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-top: 10px;
+}
+.cdf-meta2 {
+  margin: 2px 0 6px;
+  font-size: 10px;
+}
+.cdf-line {
+  display: inline-block;
+  min-width: 30mm;
+  border-bottom: 1px solid #000;
+  vertical-align: bottom;
+}
+.cdf-table thead th {
+  text-align: center;
+}
+.cdf-table tr {
+  break-inside: avoid;
+}
+.cdf-sub {
+  font-size: 9.5px;
+}
+/* 空白支票：最后一栏留一格给业务部手写金额，左上角印币种 */
+.cdf-table td.cdf-confirm {
+  height: 34px;
+  vertical-align: top;
+}
+.cdf-cur {
+  font-size: 9px;
+}
+.cdf-table th.cdf-total-label {
+  text-align: right;
+}
+.cdf-note {
+  margin-top: 6px;
+  font-size: 10px;
+}
+.cdf-sign {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  margin-top: 26px;
+  break-inside: avoid;
+}
+.cdf-sign .cv-sign-name {
+  min-height: 42px;
+}
+.cdf-date {
+  margin-top: 10px;
+  font-size: 10px;
+}
+.cdf-date .cdf-line {
+  min-width: 24mm;
+}
 @page {
   size: A4 portrait;
   margin: 10mm;

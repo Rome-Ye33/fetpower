@@ -339,6 +339,7 @@ const VALUES: Record<string, string> = {
   "取消了和到账的关联": "Unlinked from the receipt",
   "恢复待存": "Back to “to deposit”",
   "今天到期": "Due today",
+  "明日到期": "Due tomorrow",
   "本周到期": "Due this week",
   "到期还没存": "Overdue, not deposited",
   "已存没到账": "Deposited, not cleared",
@@ -1709,6 +1710,13 @@ const UI: Record<string, string> = {
   "按序号改一批：先在台账「序号」那一列搜合同序号，再点表头的勾全选，然后到这里改。也可以打开其中一张，点右上角「改这一批」。":
     "To edit one batch: search the contract no. in the Seq. column, tick the header checkbox to select them all, then come here. Or open any one of them and click Edit this batch, top right.",
   "先勾要改的项": "Tick what to change first",
+  // 支票存票审批单（打印）
+  "打印存票审批单（{n} 张）": "Print deposit form ({n})",
+  "回到支票管理": "Back to cheques",
+  "没有选中支票": "No cheques selected",
+  "找不到这些支票，或没有权限": "Cheques not found, or not allowed",
+  "选中的支票都不是待存的，没有要存的": "None of the selected cheques is waiting to be deposited",
+  "{n} 张不是待存的，没放进来：{list}": "{n} not waiting to be deposited, left off the form: {list}",
   "这几张票不是同一个客户的，要改车请连客户一起勾上": "These cheques are not all for one customer; to change the vehicles, tick Customer as well",
   "请选到期日期": "Choose the due date",
   "已改 {n} 张支票": "{n} cheques changed",

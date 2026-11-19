@@ -725,9 +725,6 @@ html[lang='en'] .logo-name {
 .cdf-table td.cdf-nowrap .cdf-sub {
   white-space: normal;
 }
-.cdf-table .cv-vin {
-  font-size: 9px;
-}
 /* 每一行留出手写的高度（业务部确认金额、情况说明） */
 .cdf-table tr.cdf-row td {
   height: 32px;

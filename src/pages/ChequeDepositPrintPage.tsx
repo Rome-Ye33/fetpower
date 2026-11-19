@@ -5,7 +5,7 @@ import type { CSSProperties } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import fetLogo from '../assets/fet-logo.jpg'
 import { useAuth } from '../lib/auth'
-import { CHEQUE_STATUS_LABEL, chequeStatus, chequeVins, waitingDeposit } from '../lib/cheques'
+import { CHEQUE_STATUS_LABEL, chequeStatus, chequeVehicleIds, waitingDeposit } from '../lib/cheques'
 import type { Cheque } from '../lib/cheques'
 import { errorText } from '../lib/errors'
 import { dateTime, money, num, todayAccra } from '../lib/format'
@@ -47,6 +47,21 @@ function instText(c: Cheque): string {
   if (c.contract_no) parts.push(c.contract_no)
   if (c.installment_no) parts.push(`${c.installment_no}/${c.installment_count ?? c.installment_no}`)
   return parts.join(' · ')
+}
+
+/**
+ * 车型（Rome 2026-11-19 10:28「这个写车的型号」「不要写大架号」）：车辆台账的车型多是整张订单的写法（「1台 三吨杭叉」），
+ * 前面的「N台」去掉；混着几种车的（「1台 400马力车头 + 1台 半挂」）照原样。几台车同一个车型写「车型 × 台数」。
+ */
+function modelText(c: Cheque): string {
+  const strip = (m: string) => {
+    const rest = m.replace(/^\s*\d+\s*台\s*/, '')
+    return rest !== m && rest && !/\d+\s*台/.test(rest) ? rest : m
+  }
+  const models = [...new Set((c.models ?? c.model ?? '').split(' / ').map((m) => strip(m.trim())).filter(Boolean))]
+  const n = chequeVehicleIds(c).length
+  if (!models.length) return ''
+  return models.length === 1 && n > 1 ? `${models[0]} × ${n}` : models.join(' / ')
 }
 
 /** 地址里的 ids=1,2,3 */
@@ -260,9 +275,9 @@ function PrintForm({ ids }: { ids: number[] }) {
                   <tr>
                     <th>#</th>
                     <th>
-                      客户 / 车
+                      客户 / 车型
                       <br />
-                      CUSTOMER / VEHICLE
+                      CUSTOMER / MODEL
                     </th>
                     <th>
                       支票号 / 银行
@@ -304,7 +319,7 @@ function PrintForm({ ids }: { ids: number[] }) {
                 <tbody>
                   {list.map((c, i) => {
                     const blank = c.amount == null
-                    const vins = chequeVins(c)
+                    const model = modelText(c)
                     return (
                       <tr key={c.id} className={blank ? 'cdf-row cdf-row-blank' : 'cdf-row'}>
                         <td className="c">{i + 1}</td>
@@ -312,12 +327,7 @@ function PrintForm({ ids }: { ids: number[] }) {
                           {/* 支票上的户名和客户名只是大小写不同（常见）就不重复印 */}
                           {c.customer_name}
                           {c.drawer_name && c.drawer_name.toLowerCase() !== (c.customer_name ?? '').toLowerCase() && <div className="cdf-sub">{c.drawer_name}</div>}
-                          {vins.length > 0 && (
-                            <div className="cdf-sub cv-vin">
-                              {vins[0]}
-                              {vins.length > 1 ? ` +${vins.length - 1}` : ''}
-                            </div>
-                          )}
+                          {model && <div className="cdf-sub cdf-model">{model}</div>}
                         </td>
                         <td>
                           {c.cheque_no}

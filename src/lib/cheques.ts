@@ -136,7 +136,7 @@ export function waitingDeposit(c: Cheque): boolean {
 
 /**
  * 支票存票审批单（Rome 2026-11-19：明日到期的列表全选打印，有金额的照印，没写金额的业务部确认金额，
- * 应收会计、财务经理、销售部签字）：新标签页打开打印页，勾中的支票 id 放在地址里。
+ * 应收会计、财务主管（原来叫财务经理，Rome 11:33 改的）、销售部签字）：新标签页打开打印页，勾中的支票 id 放在地址里。
  */
 export function printDepositForm(ids: number[]) {
   const base = window.location.href.split('#')[0]

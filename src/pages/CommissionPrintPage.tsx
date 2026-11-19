@@ -9,6 +9,7 @@ import type { CommissionVoucher } from '../lib/commission'
 import { errorText } from '../lib/errors'
 import { num } from '../lib/format'
 import { useT } from '../lib/i18n'
+import { fitScale } from '../lib/printFit'
 import { useRefData } from '../lib/refdata'
 import { supabase } from '../lib/supabase'
 import { fetchTrail } from '../lib/workbench'
@@ -21,35 +22,6 @@ import type { ApprovalLog } from '../lib/workbench'
 // 所以出单以后量一下高度，放不下就整张单子一起缩小（像 Excel 的“调整为一页”），屏幕上看到的就是打出来的样子。
 // 量高度时按打印的宽度 190mm 量，窗口宽窄不影响缩放比例。最多缩到 60%，再小看不清，宁可打两页。
 // 不想缩的在工具栏把“缩到一页”去掉。
-
-/** A4 竖版 297mm 减掉上下页边距各 10mm（@page 里设的） */
-const PAGE_MM = 277
-/** 打印时单子的宽度：A4 210mm 减掉左右页边距各 10mm */
-const SHEET_MM = 190
-/** 最多缩到这么小 */
-const MIN_SCALE = 0.6
-
-/** 这张单要缩到几成才放得进一页（scale = 1 表示不用缩），以及缩之前有多高（px）：
- *  print = 按打印的宽度 190mm 排版时的高度（分页看这个），screen = 现在窗口里的高度（窗口窄时会更高） */
-function fitScale(sheet: HTMLElement): { scale: number; print: number; screen: number } {
-  const probe = document.createElement('div')
-  probe.style.cssText = 'position:absolute;top:0;left:-9999px;visibility:hidden;width:100mm;height:100mm'
-  document.body.appendChild(probe)
-  const pxPerMm = probe.getBoundingClientRect().height / 100
-  probe.remove()
-  if (!pxPerMm) return { scale: 1, print: 0, screen: 0 }
-  const onScreen = sheet.scrollHeight
-  // 窗口比一页窄时单子会被挤窄、变高，所以量之前先按打印的宽度排一次
-  const { width, maxWidth } = sheet.style
-  sheet.style.width = `${SHEET_MM}mm`
-  sheet.style.maxWidth = 'none'
-  const height = sheet.scrollHeight
-  sheet.style.width = width
-  sheet.style.maxWidth = maxWidth
-  const page = PAGE_MM * pxPerMm
-  if (!height || height <= page) return { scale: 1, print: height, screen: onScreen }
-  return { scale: Math.max(MIN_SCALE, Math.floor((page / height) * 100) / 100), print: height, screen: onScreen }
-}
 
 export default function CommissionPrintPage() {
   const { id } = useParams()

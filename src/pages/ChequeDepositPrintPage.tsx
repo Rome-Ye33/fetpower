@@ -21,7 +21,8 @@ import { supabase } from '../lib/supabase'
 // 有金额的照印；空白支票在「业务部确认金额」一栏留一格，业务部手写金额；后面「情况说明」一栏都留空手写（Rome 09:47 加的，09:48「稍微宽一点」）。
 // 「缩到一页」（Rome 09:48「需要可以设置缩打到一页」，默认勾上，和提成单一样）：放不下就整张缩小，最多缩到 60%；
 // 缩到 60% 还放不下就不缩，按原大小分页打（表头每页都有，一行不拆开），比整张缩小了再断成两页清楚。
-// 底下三个签字（应收会计、财务经理、销售部）是纸上签字，不是线上审批；单子上的内容和英文照提成单的做法中英都印。
+// 底下三个签字（应收会计、财务主管、销售部）是纸上签字，不是线上审批；单子上的内容和英文照提成单的做法中英都印。
+// 中间那个原来写财务经理，Rome 11:33「写成财务主管而不是财务经理」。
 
 /** 存票那天：定了计划存票日期按计划，没定按到期日期（和台账上的提醒一样） */
 const actDate = (c: Cheque) => c.plan_date ?? c.due_date ?? ''
@@ -431,7 +432,7 @@ function PrintForm({ ids }: { ids: number[] }) {
               )}
               <div className="cv-sign cdf-sign">
                 <Signer zh="财务部 应收会计" en="FINANCE · AR ACCOUNTANT" />
-                <Signer zh="财务部 财务经理" en="FINANCE MANAGER" />
+                <Signer zh="财务部 财务主管" en="FINANCE SUPERVISOR" />
                 <Signer zh="销售部" en="SALES DEPT" />
               </div>
             </div>

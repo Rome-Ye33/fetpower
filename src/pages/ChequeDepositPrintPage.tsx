@@ -5,7 +5,7 @@ import type { CSSProperties } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import fetLogo from '../assets/fet-logo.jpg'
 import { useAuth } from '../lib/auth'
-import { CHEQUE_STATUS_LABEL, chequeStatus, chequeVehicleIds, waitingDeposit } from '../lib/cheques'
+import { CHEQUE_STATUS_LABEL, chequeStatus, waitingDeposit } from '../lib/cheques'
 import type { Cheque } from '../lib/cheques'
 import { errorText } from '../lib/errors'
 import { dateTime, money, num, todayAccra } from '../lib/format'
@@ -50,18 +50,63 @@ function instText(c: Cheque): string {
 }
 
 /**
- * 车型（Rome 2026-11-19 10:28「这个写车的型号」「不要写大架号」）：车辆台账的车型多是整张订单的写法（「1台 三吨杭叉」），
- * 前面的「N台」去掉；混着几种车的（「1台 400马力车头 + 1台 半挂」）照原样。几台车同一个车型写「车型 × 台数」。
+ * 视图里几台车的车型是用「 / 」连起来的；车型自己带「 / 」的（「洒水车（水罐车 / WATER TANK）」）都在括号里，括号里的不拆
+ */
+function splitModels(s: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  let cur = ''
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (ch === '(' || ch === '（') depth++
+    else if ((ch === ')' || ch === '）') && depth > 0) depth--
+    if (depth === 0 && s.startsWith(' / ', i)) {
+      out.push(cur.trim())
+      cur = ''
+      i += 2
+      continue
+    }
+    cur += ch
+  }
+  out.push(cur.trim())
+  return out.filter(Boolean)
+}
+
+/** 车型前面写的台数：「1台 」「3台」「一台 」 */
+const QTY_PREFIX = /^\s*(?:\d+|[一二两三四五六七八九十])\s*台\s*/
+
+/** 去掉车型前面写的台数；车型里各自写了台数的（「1台 400马力车头 + 1台 半挂」）返回 null，照原样用 */
+function bareModel(model: string): string | null {
+  const q = QTY_PREFIX.exec(model)
+  const rest = q ? model.slice(q[0].length).trim() : model
+  return /\d+\s*台/.test(rest) ? null : rest
+}
+
+/**
+ * 车型和台数（Rome 2026-11-19 10:28「这个写车的型号」「不要写大架号」，10:42「加上数量」）：
+ * 车辆台账的车型多是整张订单的写法（「1台 三吨杭叉」「3台 重汽6*4水车」），台数按这张支票挂的车数：
+ * 同一个车型的几台合成一行「3台 重汽6*4水车」，几种车用「 / 」隔开（「2台 自卸车 / 1台 压路机」），车型里各自写了台数的照原样；
+ * 有的车没填车型、对不上是哪台时，车型照原样，后面写一共几台。
  */
 function modelText(c: Cheque): string {
-  const strip = (m: string) => {
-    const rest = m.replace(/^\s*\d+\s*台\s*/, '')
-    return rest !== m && rest && !/\d+\s*台/.test(rest) ? rest : m
+  // 挂着的车有几台（视图里数的，删掉的车不算）；老数据只有一台车（vehicle_id）时视图不数，按 1 台
+  const n = c.vehicle_count || (c.model ? 1 : 0)
+  const list = splitModels(c.models ?? c.model ?? '')
+  if (!n) return list.join(' / ')
+  if (list.length !== n) {
+    const uniq = [...new Set(list.map((m) => bareModel(m) ?? m).filter(Boolean))]
+    return uniq.length ? `${uniq.join(' / ')}（共 ${n} 台）` : `${n}台`
   }
-  const models = [...new Set((c.models ?? c.model ?? '').split(' / ').map((m) => strip(m.trim())).filter(Boolean))]
-  const n = chequeVehicleIds(c).length
-  if (!models.length) return ''
-  return models.length === 1 && n > 1 ? `${models[0]} × ${n}` : models.join(' / ')
+  // 同一个车型的几台合在一起数（「1台重汽…」「1台 重汽…」只差台数后面的空格，也算同一个车型）
+  const groups = new Map<string, { k: number; asIs: boolean }>()
+  for (const m of list) {
+    const bare = bareModel(m)
+    const key = (bare ?? m).replace(/\s+/g, ' ')
+    const g = groups.get(key)
+    if (g) g.k++
+    else groups.set(key, { k: 1, asIs: bare === null })
+  }
+  return [...groups].map(([m, g]) => (g.asIs ? m : m ? `${g.k}台 ${m}` : `${g.k}台`)).join(' / ')
 }
 
 /** 地址里的 ids=1,2,3 */

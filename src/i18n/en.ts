@@ -1718,6 +1718,8 @@ const UI: Record<string, string> = {
   "选中的支票都不是待存的，没有要存的": "None of the selected cheques is waiting to be deposited",
   "{n} 张不是待存的，没放进来：{list}": "{n} not waiting to be deposited, left off the form: {list}",
   "张数太多，缩到 {pct}% 也放不下一页，按原大小分页打": "Too many cheques to fit one page even at {pct}%; printing at full size over several pages",
+  "网站刚更新过，刷新一下就好": "The site was just updated. Please refresh the page.",
+  "这个页面出错了，刷新一下试试": "Something went wrong on this page. Try refreshing.",
   "这几张票不是同一个客户的，要改车请连客户一起勾上": "These cheques are not all for one customer; to change the vehicles, tick Customer as well",
   "请选到期日期": "Choose the due date",
   "已改 {n} 张支票": "{n} cheques changed",

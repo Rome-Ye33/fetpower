@@ -24,6 +24,32 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: 带上上一版的文件
+        continue-on-error: true
+        # 更新以后，还开着上一版网页（或浏览器、CDN 还缓存着上一版首页）的人会去拿上一版的文件；
+        # 以前一更新就全删了，拿不到就白屏（Rome 2026-11-19「怎么有点卡」）。现在上一版的文件多留一版，再早的不留。
+        # assets-list.txt 记着这一版自己的文件，下次发布时只带上这些。
+        run: |
+          (cd dist/assets && ls -1) > dist/assets-list.txt
+          if git fetch -q --depth=1 origin gh-pages; then
+            mkdir -p "$RUNNER_TEMP/old"
+            git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/old"
+            if [ -f "$RUNNER_TEMP/old/assets-list.txt" ]; then
+              cp "$RUNNER_TEMP/old/assets-list.txt" "$RUNNER_TEMP/prev.txt"
+            else
+              (cd "$RUNNER_TEMP/old/assets" 2>/dev/null && ls -1) > "$RUNNER_TEMP/prev.txt" || true
+            fi
+            kept=0
+            while IFS= read -r f; do
+              if [ -n "$f" ] && [ -f "$RUNNER_TEMP/old/assets/$f" ] && [ ! -e "dist/assets/$f" ]; then
+                cp "$RUNNER_TEMP/old/assets/$f" "dist/assets/$f"
+                kept=$((kept + 1))
+              fi
+            done < "$RUNNER_TEMP/prev.txt"
+            echo "带上上一版的文件 $kept 个"
+          else
+            echo "还没有 gh-pages 分支，不用带"
+          fi
       - name: 推到 gh-pages 分支
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

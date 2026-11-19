@@ -6,9 +6,97 @@
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>业财管理 · Sales &amp; Finance</title>
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 24px;
+        background: #f3f5f9;
+        color: #64748b;
+        font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        text-align: center;
+      }
+      #boot-spin {
+        width: 28px;
+        height: 28px;
+        border: 3px solid #dbe4f3;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      #boot-slow {
+        display: none;
+        font-size: 13px;
+      }
+      #boot button {
+        margin-left: 4px;
+        padding: 2px 12px;
+        border: 1px solid #2563eb;
+        border-radius: 6px;
+        background: #fff;
+        color: #2563eb;
+        font: inherit;
+        cursor: pointer;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+    <script>
+      // 网页还没出来时（文件还在下载）显示「正在打开」，不再整页白着（Rome 2026-11-19「怎么有点卡」）。
+      // 网页的文件拿不到（刚更新完浏览器还拿着旧首页、网断了）：自动刷新一次换成新版；一分钟内刷过还不行，就写明并给「刷新」。
+      // 网页出来以后 #boot 就被换掉了，这里不再管；之后拿不到文件由 src/lib/updateReload.ts 管（同一个记号，两边加起来一分钟也只刷一次）。
+      ;(function () {
+        function failed() {
+          if (!document.getElementById('boot')) return
+          var key = 'auto-reload-at'
+          var last = 0
+          try {
+            last = Number(sessionStorage.getItem(key) || 0)
+          } catch (e) {}
+          if (Date.now() - last > 60000) {
+            try {
+              sessionStorage.setItem(key, String(Date.now()))
+              location.reload()
+              return
+            } catch (e) {}
+          }
+          var spin = document.getElementById('boot-spin')
+          var msg = document.getElementById('boot-msg')
+          var slow = document.getElementById('boot-slow')
+          if (spin) spin.style.display = 'none'
+          if (slow) slow.style.display = 'none'
+          if (msg) msg.innerHTML = '网页没打开 Page failed to load <button type="button" onclick="location.reload()">刷新 Reload</button>'
+        }
+        window.addEventListener(
+          'error',
+          function (e) {
+            if (e.target && e.target.tagName === 'SCRIPT') failed()
+          },
+          true,
+        )
+        setTimeout(function () {
+          var slow = document.getElementById('boot-slow')
+          if (document.getElementById('boot-spin') && slow && document.getElementById('boot-spin').style.display !== 'none') slow.style.display = 'block'
+        }, 15000)
+      })()
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot">
+        <div id="boot-spin"></div>
+        <div id="boot-msg">正在打开… Loading…</div>
+        <div id="boot-slow">网络慢的话再等一下 Still loading <button type="button" onclick="location.reload()">刷新 Reload</button></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,5 +1,6 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
-import { App, Button, Input, Popconfirm, Select, Space, Table, Tag, Tooltip } from 'antd'
+import { PlusOutlined, PrinterOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
+import { Button, DatePicker, Input, Select, Space, Table, Tag, Tooltip } from 'antd'
+import dayjs from 'dayjs'
 import type { Key } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -20,14 +21,12 @@ import {
   chequeVehicleIds,
   chequeVins,
   inAlert,
-  notifyChequesChanged,
   printDepositForm,
   waitingDeposit,
 } from '../lib/cheques'
 import type { Cheque, ChequeAlert, ChequeStatus } from '../lib/cheques'
 import { colsWidth, pickCol, textCol } from '../lib/colFilter'
-import { errorText } from '../lib/errors'
-import { cleanSearch, money, shortDate, usd } from '../lib/format'
+import { cleanSearch, money, shortDate, todayAccra, usd } from '../lib/format'
 import { useT } from '../lib/i18n'
 import { accountOptions, useRefData } from '../lib/refdata'
 import { fetchAll, supabase } from '../lib/supabase'
@@ -40,7 +39,6 @@ const OPEN_STATUSES: string[] = ['pending', 'confirming', 'deposited', 'bounced'
 
 export default function ChequesPage() {
   const t = useT()
-  const { message } = App.useApp()
   const { canEdit, canView, perm, role } = useAuth()
   /** 录、改、删、导入支票（“支票管理”可编辑）；只看的只能看台账和记录 */
   const chEdit = canEdit('cheques')
@@ -55,13 +53,14 @@ export default function ChequesPage() {
   const [salespersonId, setSalespersonId] = useState<number | undefined>()
   const [accountId, setAccountId] = useState<number | undefined>()
   const [q, setQ] = useState('')
+  /** 按到期日期筛（Rome 2026-11-20「这个我可以选到期日期来筛选吗」）：从哪天到哪天，两头都算；没写到期日期的票选了就不出来 */
+  const [dueRange, setDueRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null)
   const [editor, setEditor] = useState<{ open: boolean; cheque: Cheque | null }>({ open: false, cheque: null })
   const [detailId, setDetailId] = useState<number | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [receipt, setReceipt] = useState<{ open: boolean; id: number | null; prefill: ReceiptPrefill | null }>({ open: false, id: null, prefill: null })
   const [selected, setSelected] = useState<number[]>([])
-  const [deleting, setDeleting] = useState(false)
-  /** 批量修改要改的那几张：勾中的，或者详情里「改这一批」给的整批；null = 没开 */
+  /** 批量修改要改的那几张：详情里「改这一批」给的整批；null = 没开 */
   const [bulk, setBulk] = useState<Cheque[] | null>(null)
 
   const load = useCallback(async () => {
@@ -70,6 +69,9 @@ export default function ChequesPage() {
       supabase.from('v_cheques').select('*').order('due_date', { ascending: true, nullsFirst: false }).order('id', { ascending: true }),
     )
     setRows(data)
+    // 勾着的票存了、退了、删了（状态变了）就不再算勾着：勾选只用来打印存票审批单，只留还没存的
+    const waiting = new Set(data.filter(waitingDeposit).map((c) => c.id as number))
+    setSelected((prev) => (prev.every((id) => waiting.has(id)) ? prev : prev.filter((id) => waiting.has(id))))
     setLoading(false)
   }, [])
 
@@ -96,11 +98,34 @@ export default function ChequesPage() {
       } else if (status !== 'all' && c.status !== status) return false
       if (salespersonId && c.salesperson_id !== salespersonId) return false
       if (accountId && c.deposit_account_id !== accountId) return false
+      if (dueRange) {
+        const d = c.due_date ?? ''
+        if (!d || d < dueRange[0].format('YYYY-MM-DD') || d > dueRange[1].format('YYYY-MM-DD')) return false
+      }
       if (s && !`${c.cheque_no ?? ''} ${c.customer_name ?? ''} ${c.drawer_name ?? ''} ${c.vins ?? c.vin ?? ''} ${c.drawer_bank ?? ''} ${c.contract_no ?? ''}`.toLowerCase().includes(s))
         return false
       return true
     })
-  }, [rows, alert, status, salespersonId, accountId, q])
+  }, [rows, alert, status, salespersonId, accountId, dueRange, q])
+
+  /** 到期日期的快捷选项：本周是周一到周日，本月是 1 号到月底；点的时候才按加纳的今天算（页面开过夜也对） */
+  const duePresets = useMemo(() => {
+    type Range = [dayjs.Dayjs, dayjs.Dayjs]
+    const today = () => dayjs(todayAccra())
+    const monday = () => today().subtract((today().day() + 6) % 7, 'day')
+    const month = (n: number): Range => {
+      const m = today().add(n, 'month')
+      return [m.startOf('month'), m.endOf('month')]
+    }
+    return [
+      { label: t('今天'), value: (): Range => [today(), today()] },
+      { label: t('明天'), value: (): Range => [today().add(1, 'day'), today().add(1, 'day')] },
+      { label: t('本周'), value: (): Range => [monday(), monday().add(6, 'day')] },
+      { label: t('下周'), value: (): Range => [monday().add(7, 'day'), monday().add(13, 'day')] },
+      { label: t('本月'), value: () => month(0) },
+      { label: t('下个月'), value: () => month(1) },
+    ]
+  }, [t])
 
   const detail = detailId == null ? null : (rows.find((c) => c.id === detailId) ?? null)
 
@@ -133,41 +158,13 @@ export default function ChequesPage() {
     })
   }
 
-  // 批量删除：按列表上看得见的选中项算；已到账的不删（数据库的删除策略也拦着）
-  const chosen = shown.filter((c) => selected.includes(c.id as number))
-  /** 存票审批单只放还没存的（待存 / 等业务确认）：勾中的里面已存、已到账这些不算 */
-  const toDeposit = chosen.filter(waitingDeposit)
+  // 勾选只用来打印存票审批单（Rome 2026-11-20「去掉这俩」：台账上的「修改选中」「删除选中」去掉了，
+  // 批量修改从详情里的「改这一批」进，删除在详情里一张一张删）。按列表上看得见的选中项算
+  /** 存票审批单只放还没存的（待存 / 等业务确认）；别的票勾不上，勾了以后状态变了的重新读的时候就去掉了（load） */
+  const toDeposit = shown.filter((c) => selected.includes(c.id as number) && waitingDeposit(c))
   /** 详情里的「改这一批」：同一个客户、同一个合同序号的所有支票（不看当前的筛选，整批都要） */
   const stackOf = (c: Cheque) =>
     c.contract_no ? rows.filter((x) => x.contract_no === c.contract_no && x.customer_id === c.customer_id) : [c]
-  const removeSelected = async () => {
-    const kept = chosen.filter((c) => c.status === 'cleared')
-    const ids = chosen.filter((c) => c.status !== 'cleared').map((c) => c.id as number)
-    setDeleting(true)
-    if (ids.length) {
-      const { error } = await supabase.from('cheques').delete().in('id', ids)
-      if (error) {
-        setDeleting(false)
-        message.error(errorText(error))
-        return
-      }
-    }
-    setDeleting(false)
-    if (kept.length)
-      message.warning(
-        t('已删除 {n} 张；{m} 张没删：{list}（已到账的要先取消和到账的关联）', {
-          n: ids.length,
-          m: kept.length,
-          list: kept.map((c) => c.cheque_no).join('、'),
-        }),
-        8,
-      )
-    else message.success(t('已删除 {n} 张支票', { n: ids.length }))
-    setSelected([])
-    notifyChequesChanged()
-    void load()
-  }
-
   const dueCell = (c: Cheque) => {
     if (!c.due_date) return <span className="hint">{t('没写')}</span>
     const d = c.days_to_due
@@ -365,31 +362,22 @@ export default function ChequesPage() {
           value={accountId}
           onChange={setAccountId}
         />
+        <DatePicker.RangePicker
+          className="cheque-due-range"
+          allowClear
+          placeholder={[t('到期日期从'), t('到期日期到')]}
+          style={{ width: 270 }}
+          value={dueRange}
+          onChange={(v) => setDueRange(v && v[0] && v[1] ? [v[0], v[1]] : null)}
+          presets={duePresets}
+          classNames={{ popup: { root: 'cheque-due-popup' } }}
+        />
         <Input.Search allowClear placeholder={t('支票号、客户、户名、大架号、合同序号')} style={{ width: 240 }} onSearch={setQ} />
         <Button icon={<ReloadOutlined />} onClick={() => void load()} />
         {chEdit && toDeposit.length > 0 && (
           <Button icon={<PrinterOutlined />} onClick={() => printDepositForm(toDeposit.map((c) => c.id as number))} className="cheque-deposit-print">
             {t('打印存票审批单（{n} 张）', { n: toDeposit.length })}
           </Button>
-        )}
-        {chEdit && chosen.length > 0 && (
-          <Button icon={<EditOutlined />} onClick={() => setBulk(chosen)} className="cheque-bulk-btn">
-            {t('修改选中 {n} 张', { n: chosen.length })}
-          </Button>
-        )}
-        {chEdit && chosen.length > 0 && (
-          <Popconfirm
-            title={t('删除选中的 {n} 张支票？', { n: chosen.length })}
-            description={t('已到账的不会删。删掉的支票不能恢复，重新导入表格可以再导进来。')}
-            okText={t('删除')}
-            cancelText={t('取消')}
-            okButtonProps={{ danger: true }}
-            onConfirm={() => void removeSelected()}
-          >
-            <Button danger icon={<DeleteOutlined />} loading={deleting} className="cheque-bulk-delete">
-              {t('删除选中 {n} 张', { n: chosen.length })}
-            </Button>
-          </Popconfirm>
         )}
         {chEdit && (
           <>
@@ -418,6 +406,8 @@ export default function ChequesPage() {
                 selectedRowKeys: selected,
                 onChange: (keys: Key[]) => setSelected(keys as number[]),
                 selections: [Table.SELECTION_ALL, Table.SELECTION_NONE],
+                // 只有还没存的（待存 / 等业务确认）能进存票审批单，别的票勾不上（全选也只勾这些）
+                getCheckboxProps: (c: Cheque) => ({ disabled: !waitingDeposit(c) }),
                 columnWidth: 40,
                 fixed: true,
               }

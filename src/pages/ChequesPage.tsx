@@ -17,6 +17,7 @@ import {
   CHEQUE_STATUS_COLOR,
   CHEQUE_STATUS_LABEL,
   CHEQUE_STATUSES,
+  actDate,
   chequeStatus,
   chequeVehicleIds,
   chequeVins,
@@ -53,7 +54,7 @@ export default function ChequesPage() {
   const [salespersonId, setSalespersonId] = useState<number | undefined>()
   const [accountId, setAccountId] = useState<number | undefined>()
   const [q, setQ] = useState('')
-  /** 按到期日期筛（Rome 2026-11-20「这个我可以选到期日期来筛选吗」）：从哪天到哪天，两头都算；没写到期日期的票选了就不出来 */
+  /** 按到期日期筛（Rome 2026-11-20「这个我可以选到期日期来筛选吗」）：从哪天到哪天，两头都算；定了计划存票日期的按计划日期、没定的按到期日期（actDate，什么状态都一样）；没有日期的票选了就不出来 */
   const [dueRange, setDueRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null)
   const [editor, setEditor] = useState<{ open: boolean; cheque: Cheque | null }>({ open: false, cheque: null })
   const [detailId, setDetailId] = useState<number | null>(null)
@@ -99,7 +100,7 @@ export default function ChequesPage() {
       if (salespersonId && c.salesperson_id !== salespersonId) return false
       if (accountId && c.deposit_account_id !== accountId) return false
       if (dueRange) {
-        const d = c.due_date ?? ''
+        const d = actDate(c) ?? ''
         if (!d || d < dueRange[0].format('YYYY-MM-DD') || d > dueRange[1].format('YYYY-MM-DD')) return false
       }
       if (s && !`${c.cheque_no ?? ''} ${c.customer_name ?? ''} ${c.drawer_name ?? ''} ${c.vins ?? c.vin ?? ''} ${c.drawer_bank ?? ''} ${c.contract_no ?? ''}`.toLowerCase().includes(s))

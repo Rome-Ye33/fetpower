@@ -1545,3 +1545,32 @@ html[lang='en'] .logo-name {
   max-height: 160px;
   overflow: auto;
 }
+
+/* 支票台账的「到期日期」（Rome 2026-11-20）：手机上（业务员开了支票的）弹出来的日历两个月并排放不下，
+   改成只放一个月（左右箭头翻月），快捷选项排在上面一行，整个弹窗不超出屏幕 */
+@media (max-width: 575px) {
+  .ant-picker-dropdown.cheque-due-popup .ant-picker-panel-layout {
+    flex-direction: column;
+  }
+  .ant-picker-dropdown.cheque-due-popup .ant-picker-presets {
+    max-width: none;
+  }
+  .ant-picker-dropdown.cheque-due-popup .ant-picker-presets ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    height: auto;
+    border-inline-end: none;
+    border-bottom: 1px solid rgba(5, 5, 5, 0.06);
+  }
+  .ant-picker-dropdown.cheque-due-popup .ant-picker-presets ul li + li {
+    margin-top: 0;
+  }
+  .ant-picker-dropdown.cheque-due-popup .ant-picker-panels > .ant-picker-panel:nth-child(2) {
+    display: none;
+  }
+  .ant-picker-dropdown.cheque-due-popup .ant-picker-panels > .ant-picker-panel:first-child .ant-picker-header-next-btn,
+  .ant-picker-dropdown.cheque-due-popup .ant-picker-panels > .ant-picker-panel:first-child .ant-picker-header-super-next-btn {
+    visibility: visible !important;
+  }
+}

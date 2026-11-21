@@ -175,6 +175,7 @@ export function itemText(k: string, x: Json, t: Tr, cur?: string): string {
   } else if (k === 'vehicles') {
     parts.push(o.model ? `${str(o.vin)}（${str(o.model)}）` : str(o.vin))
     if (o.commission !== null && o.commission !== undefined) parts.push(t('本车提成 {amt}', { amt: '$ ' + money(o.commission) }))
+    if (o.rate !== null && o.rate !== undefined) parts.push(t('本车汇率 {rate}', { rate: String(o.rate) }))
   } else if (k === 'payments') {
     parts.push(o.receipt ? str(o.receipt) : t('期初'))
     parts.push(o.vin ? str(o.vin) : t('未锁定'))

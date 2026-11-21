@@ -1,8 +1,9 @@
-import { PlusOutlined, PrinterOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
+import { DownloadOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { Button, DatePicker, Input, Select, Space, Table, Tag, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import type { Key } from 'react'
 import type { ColumnsType } from 'antd/es/table'
+import type { FilterValue } from 'antd/es/table/interface'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ChequeBulkEdit from '../components/ChequeBulkEdit'
 import ChequeDetail from '../components/ChequeDetail'
@@ -26,9 +27,11 @@ import {
   waitingDeposit,
 } from '../lib/cheques'
 import type { Cheque, ChequeAlert, ChequeStatus } from '../lib/cheques'
+import { chequeSheet } from '../lib/chequeExport'
 import { colsWidth, pickCol, textCol } from '../lib/colFilter'
 import { cleanSearch, money, shortDate, todayAccra, usd } from '../lib/format'
 import { useT } from '../lib/i18n'
+import { saveBook } from '../lib/journalExport'
 import { accountOptions, useRefData } from '../lib/refdata'
 import { fetchAll, supabase } from '../lib/supabase'
 
@@ -61,6 +64,8 @@ export default function ChequesPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [receipt, setReceipt] = useState<{ open: boolean; id: number | null; prefill: ReceiptPrefill | null }>({ open: false, id: null, prefill: null })
   const [selected, setSelected] = useState<number[]>([])
+  /** 列头上的筛选（表格自己管着，onChange 时记一份）：导出 Excel 要照着再筛一遍，和看得见的一样 */
+  const [colFilters, setColFilters] = useState<Record<string, FilterValue | null>>({})
   /** 批量修改要改的那几张：详情里「改这一批」给的整批；null = 没开 */
   const [bulk, setBulk] = useState<Cheque[] | null>(null)
 
@@ -180,14 +185,17 @@ export default function ChequesPage() {
     )
   }
 
+  // 每列都写 key：导出 Excel 要按列头筛选的状态（colFilters，键就是这个 key）把行再筛一遍
   const columns: ColumnsType<Cheque> = [
     {
+      key: 'status',
       title: t('状态'),
       width: 110,
       render: (_, c) => <Tag color={CHEQUE_STATUS_COLOR[chequeStatus(c.status)]}>{t(CHEQUE_STATUS_LABEL[chequeStatus(c.status)])}</Tag>,
       ...pickCol(rows, (c) => CHEQUE_STATUS_LABEL[chequeStatus(c.status)], t),
     },
     {
+      key: 'serial',
       title: t('序号'),
       width: 100,
       render: (_, c) =>
@@ -204,6 +212,7 @@ export default function ChequesPage() {
       ...textCol<Cheque>((c) => `${c.contract_no ?? ''} ${c.installment_no ?? ''}`),
     },
     {
+      key: 'cheque_no',
       title: t('支票号'),
       width: 130,
       render: (_, c) => (
@@ -215,6 +224,7 @@ export default function ChequesPage() {
       ...textCol<Cheque>((c) => `${c.cheque_no ?? ''} ${c.drawer_bank ?? ''}`),
     },
     {
+      key: 'customer',
       title: t('客户'),
       width: 200,
       ellipsis: true,
@@ -227,6 +237,7 @@ export default function ChequesPage() {
       ...textCol<Cheque>((c) => `${c.customer_name ?? ''} ${c.drawer_name ?? ''}`),
     },
     {
+      key: 'cars',
       title: t('车'),
       width: 190,
       ellipsis: true,
@@ -247,18 +258,20 @@ export default function ChequesPage() {
       },
       ...textCol<Cheque>((c) => `${c.vins ?? c.vin ?? ''} ${c.models ?? c.model ?? ''}`),
     },
-    ...(ownOnly ? [] : [{ title: t('业务员'), dataIndex: 'salesperson_name', width: 124, ellipsis: true, ...pickCol(rows, (c: Cheque) => c.salesperson_name) }]),
-    { title: t('用途'), dataIndex: 'purpose', width: 90, render: (v: string) => t(v), ...pickCol(rows, (c) => c.purpose, t) },
+    ...(ownOnly ? [] : [{ key: 'salesperson', title: t('业务员'), dataIndex: 'salesperson_name', width: 124, ellipsis: true, ...pickCol(rows, (c: Cheque) => c.salesperson_name) }]),
+    { key: 'purpose', title: t('用途'), dataIndex: 'purpose', width: 90, render: (v: string) => t(v), ...pickCol(rows, (c) => c.purpose, t) },
     {
+      key: 'amount',
       title: t('金额'),
       width: 130,
       align: 'right',
       render: (_, c) => <span className="num">{c.amount == null ? <span className="hint">{t('空白')}</span> : `${c.currency} ${money(c.amount)}`}</span>,
       ...textCol<Cheque>((c) => (c.amount == null ? '' : `${c.currency} ${money(c.amount)}`)),
     },
-    { title: t('分期款 USD'), dataIndex: 'installment_usd', width: 100, align: 'right', render: (v: number | null) => (v == null ? '' : <span className="num">{usd(v)}</span>) },
-    { title: t('到期日期'), width: 110, render: (_, c) => dueCell(c), ...textCol<Cheque>((c) => c.due_date) },
+    { key: 'installment_usd', title: t('分期款 USD'), dataIndex: 'installment_usd', width: 100, align: 'right', render: (v: number | null) => (v == null ? '' : <span className="num">{usd(v)}</span>) },
+    { key: 'due_date', title: t('到期日期'), width: 110, render: (_, c) => dueCell(c), ...textCol<Cheque>((c) => c.due_date) },
     {
+      key: 'deposit',
       title: t('存票'),
       width: 190,
       ellipsis: true,
@@ -276,6 +289,7 @@ export default function ChequesPage() {
       ...pickCol(rows, (c) => c.deposit_account_name),
     },
     {
+      key: 'receipt',
       title: t('到账'),
       width: 150,
       render: (_, c) =>
@@ -302,6 +316,7 @@ export default function ChequesPage() {
       ...textCol<Cheque>((c) => c.receipt_no ?? ''),
     },
     {
+      key: 'last_note',
       title: t('最近沟通'),
       width: 220,
       ellipsis: true,
@@ -319,6 +334,23 @@ export default function ChequesPage() {
       ...textCol<Cheque>((c) => `${c.last_note ?? ''} ${c.reason ?? ''} ${c.note ?? ''}`),
     },
   ]
+
+  /** 导出 Excel（Rome 2026-11-21「新增支票数据导出功能」）：台账上现在看得见的那些，上面那排的筛选和列头的筛选都算 */
+  const exportList = shown.filter((c) =>
+    columns.every((col) => {
+      const v = colFilters[String(col.key)]
+      return !v?.length || !col.onFilter || v.some((x) => col.onFilter?.(x as never, c))
+    }),
+  )
+  const exportExcel = () => {
+    // 文件名：支票台账-提醒或状态-到期日期-今天；还用了业务员、账户、搜索、列头这些筛选，后面加「已筛选」
+    const what = alert ? t(CHEQUE_ALERT_LABEL[alert]) : status === 'all' ? '' : status === 'open' ? t('还在处理的') : t(CHEQUE_STATUS_LABEL[status])
+    const [from, to] = dueRange ? dueRange.map((d) => d.format('YYYY-MM-DD')) : ['', '']
+    const due = dueRange ? t('到期 {date}', { date: from === to ? from : `${from}~${to}` }) : ''
+    const others = !!salespersonId || !!accountId || !!q.trim() || Object.values(colFilters).some((v) => v?.length)
+    const book = ownOnly ? t('我的支票') : t('支票台账')
+    saveBook(book, chequeSheet(t, exportList, !ownOnly), [book, what, due, todayAccra()].filter(Boolean).join('-') + (others ? '-' + t('已筛选') : ''))
+  }
 
   const statusOptions = [
     { value: 'open', label: t('还在处理的') },
@@ -375,6 +407,9 @@ export default function ChequesPage() {
         />
         <Input.Search allowClear placeholder={t('支票号、客户、户名、大架号、合同序号')} style={{ width: 240 }} onSearch={setQ} />
         <Button icon={<ReloadOutlined />} onClick={() => void load()} />
+        <Button icon={<DownloadOutlined />} onClick={exportExcel} disabled={!exportList.length} className="cheque-export">
+          {t('导出 Excel')}
+        </Button>
         {chEdit && toDeposit.length > 0 && (
           <Button icon={<PrinterOutlined />} onClick={() => printDepositForm(toDeposit.map((c) => c.id as number))} className="cheque-deposit-print">
             {t('打印存票审批单（{n} 张）', { n: toDeposit.length })}
@@ -401,6 +436,7 @@ export default function ChequesPage() {
         pagination={{ defaultPageSize: 50, showSizeChanger: true, showTotal: (n) => t('共 {n} 张支票', { n }) }}
         rowClassName={() => 'clickable-row'}
         onRow={(c) => ({ onClick: (e) => !(e.target as HTMLElement).closest('.ant-table-selection-column') && setDetailId(c.id) })}
+        onChange={(_, filters) => setColFilters(filters)}
         rowSelection={
           chEdit
             ? {

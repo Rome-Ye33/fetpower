@@ -11,14 +11,14 @@ import type { JournalLine } from './journal'
 type T = (s: string, vars?: Record<string, string | number>) => string
 type Cell = string | number | null
 
-const AMT = '#,##0.00'
+export const AMT = '#,##0.00'
 const RATE = '0.0000'
 
 /** 一列：表头（已经翻译好）、列宽、数字格式 */
-type Col = { key: string; title: string; width: number; fmt?: string }
+export type Col = { key: string; title: string; width: number; fmt?: string }
 
-/** 表头一行 + 数据，设好列宽、金额格式、自动筛选 */
-function sheet(cols: Col[], rows: Record<string, Cell | undefined>[]): XLSX.WorkSheet {
+/** 表头一行 + 数据，设好列宽、金额格式、自动筛选（支票台账的导出也用） */
+export function sheet(cols: Col[], rows: Record<string, Cell | undefined>[]): XLSX.WorkSheet {
   const ws = XLSX.utils.aoa_to_sheet([cols.map((c) => c.title), ...rows.map((r) => cols.map((c) => r[c.key] ?? null))])
   ws['!cols'] = cols.map((c) => ({ wch: c.width }))
   for (let i = 1; i <= rows.length; i++)

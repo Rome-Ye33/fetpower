@@ -1718,6 +1718,11 @@ const UI: Record<string, string> = {
   "下周": "Next week",
   "本月": "This month",
   "到期日期到": "Due to",
+  // 支票台账导出 Excel（2026-11-21）
+  "支票台账": "Cheque ledger",
+  "到期 {date}": "due {date}",
+  "到账单号": "Receipt no.",
+  "退票 / 取消原因": "Bounce / cancel reason",
   "网站刚更新过，刷新一下就好": "The site was just updated. Please refresh the page.",
   "这个页面出错了，刷新一下试试": "Something went wrong on this page. Try refreshing.",
   "这几张票不是同一个客户的，要改车请连客户一起勾上": "These cheques are not all for one customer; to change the vehicles, tick Customer as well",

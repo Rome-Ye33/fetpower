@@ -1385,6 +1385,13 @@ const UI: Record<string, string> = {
   "单价（USD）": "Unit price (USD)",
   "本车提成": "Commission",
   "不分开": "Not split",
+  // 2026-11-21 每台车的转赛地汇率
+  "本车汇率": "Rate (this unit)",
+  "同整单": "Same as voucher",
+  "有的车填了自己的汇率：折合赛地是每台车按各自的汇率算好再相加，打印的单子上每台车都印汇率和赛地":
+    "Some units have their own rate: the GHS total is each unit's commission at its own rate, added up; the printed voucher shows the rate and GHS per unit.",
+  "有的车没填汇率、整单也没填汇率，所以算不出折合赛地；填上整单汇率或把每台车的汇率都填上":
+    "Some units have no rate and the voucher has none either, so the GHS amount can't be worked out. Fill in the voucher rate or a rate for every unit.",
   "每台车都填了提成，这里就是它们相加": "Every vehicle has its own commission, so this is their sum",
   "提成金额是上面每台车填的提成相加，要改在车辆那一栏改；都清空就回到整单填一个数": "The commission is the sum of the per-vehicle amounts above; edit them in the vehicle table. Clear them all to go back to one amount for the whole voucher",
   "已到账 / 余额": "Received / balance",
@@ -2329,6 +2336,7 @@ const UI: Record<string, string> = {
   "{n} 个": "{n}",
   "{customer}（没定大架号）": "{customer} (no VIN yet)",
   "本车提成 {amt}": "commission {amt}",
+  "本车汇率 {rate}": "rate {rate}",
   // 日记账批量导入
   "银行手续费": "Bank charges",
   "收配件款和维修费": "Parts and repair payment",

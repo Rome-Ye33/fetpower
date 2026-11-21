@@ -20,16 +20,15 @@ import { dateTime, money, num, shortDate } from '../lib/format'
 import { useRefData } from '../lib/refdata'
 import type { ApprovalLog } from '../lib/workbench'
 
-// 打印的提成单：照 Excel 模板（提成单模板 Commission Voucher Template）的版式，中英文都印，A4 竖版。
-// 发的提成有人要美元、有人要赛地，所以填了汇率的单子在合计下面多印一行汇率和折合赛地（没填的照旧只印美元）。
-// 每台车的提成可以一样、也可以不一样（Rome 2026-11-13），填了就多印一列“本车提成”，合计那一行印小计；
-// 一台都没填的单子（以前的单子都是）照旧只有整单一个提成金额，这一列不出现。
-// 一张单上可以混着结清和没结清的车（Rome 2026-11-13），所以车辆那一栏印每台车现在的“已到账 / 余额”：
-// 这个数来自车辆台账（这台车收到的所有钱），不是这张单勾的那几笔，所以和下面“客户已支付金额合计”不一定对得上。
-// 内容是提交时存下的车和付款，审批后再改到账也不会变。签名栏是这张单走的审批流（提交时记下的；草稿是现在的审批流）。
-// 签名栏下面是“审批过程”（Rome 2026-11-12：打印上要体现审批的过程）：approval_logs 里这张单的每一步，
-// 谁、什么时候、做了什么（提交、哪一级通过、退回和原因、重新提交、撤回、发放），按时间先后。还没提交过的草稿没有这一栏。
-// 批准以后管理员改过（42）记一行“修改”，意见栏写改了哪几项、改前 → 改后。
+// 打印的提成单（2026-11-21 Rome「打印模板设置简单点，数据显示一目了然」，改成现在这个样子）：
+// 黑字白底、A4 竖版、中英文都印。从上到下：
+//   抬头（公司、单号、状态）→ 客户 / 业务员 / 部门 / 日期 一行 → 几个关键数字（本次发放 USD、折合赛地、提成金额、发放比例）
+//   → 一、车辆（每台车：大架号、车型、单价；分开填了提成的多印「本车提成」；填了自己汇率的多印「汇率」「折合赛地」；已到账 / 余额）
+//   → 二、客户付款（每笔：日期、款项、到账编号、金额、汇率、折合美元）+ 销售总额 / 已付 / 余额 / 分期情况 一行
+//   → 三、审批：一行审批流（谁、哪天）+ 审批过程表（提交、每一级通过、退回和原因、修改、发放）。线上审批，不用签字。
+// 空着的、为 0 的项不印（其他费用、折扣、分期那些有才出现），单子短，一眼看得到钱。
+// 内容是提交时存下的车和付款，审批后再改到账也不会变；「已到账 / 余额」是车辆台账现在的数（这台车收到的所有钱）。
+// 有人要美元、有人要赛地：填了汇率的单子印折合赛地；每台车的汇率可以不一样（47），这时每台车各印各的汇率和赛地。
 
 /** 中文 + 英文（对照表里有英文的才加） */
 function bi(zh: string | null | undefined): string {
@@ -42,9 +41,24 @@ function fill(zh: string, vars?: Record<string, number>): string {
   return zh.replace(/\{(\w+)\}/g, (_, k: string) => String(vars?.[k] ?? ''))
 }
 
-/** 有数才显示（0 和空都留白，和模板一样） */
-function amt(v: unknown): string {
-  return v === null || v === undefined || v === '' || num(v) === 0 ? '' : money(v)
+/** 有数才显示（0 和空都留白） */
+function has(v: unknown): boolean {
+  return !(v === null || v === undefined || v === '' || num(v) === 0)
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/** 表头：中文一行、英文一行 */
+function Th({ zh, en, colSpan }: { zh: string; en: string; colSpan?: number }) {
+  return (
+    <th colSpan={colSpan}>
+      {zh}
+      <br />
+      <span className="cv-en">{en}</span>
+    </th>
+  )
 }
 
 export default function CommissionSheet({
@@ -58,15 +72,12 @@ export default function CommissionSheet({
   ledger?: Map<number, { received: number; balance: number }>
 }) {
   const vehicles = parseVehicles(v.vehicles)
-  /** 每台车分开填了提成（可以一样、可以不一样）：车辆那一栏多印一列「本车提成」，合计那一行多印一个小计 */
-  const perCar = perCarCommission(vehicles)
   const payments = parsePayments(v.payments)
   const tt = savedTotals(v)
   const { steps } = useRefData()
   const byKey = new Map(steps.map((s) => [s.key, s]))
   const status = voucherStatus(v.status)
   const final = status === 'approved' || status === 'paid'
-  // 盖在右上角的状态：审批中的写明等哪一级
   const pending = status === 'submitted' && v.step ? stepPrintNames(byKey.get(v.step), v.step) : null
   const stamp = pending
     ? `待${pending.zh}审批 PENDING${pending.en ? ' ' + pending.en : ''}`
@@ -74,137 +85,136 @@ export default function CommissionSheet({
   const flow = voucherFlow(v.flow, steps)
   const many = vehicles.length > 1
   const st = tt.state
+  const ratio = v.payout_ratio == null ? null : num(v.payout_ratio)
+
+  /** 每台车分开填了提成：多一列「本车提成」 */
+  const perCar = perCarCommission(vehicles)
+  const headRate = num(v.payout_rate) > 0 ? num(v.payout_rate) : null
+  /** 每台车用的汇率（自己的，没有就整单的）；填了提成的车才算 */
+  const carRate = (x: { commission_usd: number | null; payout_rate: number | null }) => (x.commission_usd == null ? null : num(x.payout_rate) > 0 ? num(x.payout_rate) : headRate)
+  /** 有车填了和整单不一样的汇率：车辆表多印「汇率」「折合赛地」两列 */
+  const ownRates = perCar != null && vehicles.some((x) => x.commission_usd != null && x.payout_rate != null && x.payout_rate !== headRate)
+  const showGhs = tt.payoutGhs != null
+  const carGhsTotal = ownRates ? round2(vehicles.reduce((s, x) => s + (carRate(x) != null ? num(x.commission_usd) * (carRate(x) as number) : 0), 0)) : null
+  /** 车辆表各列的宽度（%）：按有没有「本车提成」「汇率 / 折合赛地」三种情况分配，加起来 100 */
+  const vehWidths = ownRates ? [4, 21, 14, 11, 11, 7, 11, 13, 8] : perCar != null ? [5, 20, 24, 12, 12, 15, 12] : [5, 22, 31, 13, 16, 13]
+  const vehCols = vehWidths.length
+
+  /** 销售及付款条件：全款的只写全款；分期的写首付、期数、每期、已还 */
+  const terms: string[] = []
+  if (v.full_payment === false) {
+    terms.push('分期 INSTALLMENTS')
+    if (has(v.down_payment_usd)) terms.push(`首付 DOWN PAYMENT $ ${money(v.down_payment_usd)}`)
+    if (v.terms_count) terms.push(`${v.terms_count} 期 TERMS`)
+    if (has(v.per_term_usd)) terms.push(`每期 PER TERM $ ${money(v.per_term_usd)}`)
+    if (tt.termsPaid != null) terms.push(`已还 PAID ${tt.termsPaid} / 剩 LEFT ${tt.termsLeft}`)
+  } else terms.push('全款 FULL PAYMENT')
 
   return (
-    <div className="cv-sheet">
-      <table className="cv-table">
-        <colgroup>
-          {/* 8 列是固定的，每一行自己拼。第 6 列（填了每台车的提成时是「本车提成」）比模板宽一点，
-              宽出来的从大架号和备注里匀，印出来标题才不会断在词中间 */}
-          <col style={{ width: '12.7%' }} />
-          <col style={{ width: '11.1%' }} />
-          <col style={{ width: '13.4%' }} />
-          <col style={{ width: '12.2%' }} />
-          <col style={{ width: '9.6%' }} />
-          <col style={{ width: '12.7%' }} />
-          <col style={{ width: '14.3%' }} />
-          <col style={{ width: '14.0%' }} />
-        </colgroup>
-        <tbody>
-          <tr>
-            <td colSpan={8} className="cv-company">
-              FET AUTO COMPANY LIMITED
-            </td>
-          </tr>
-          <tr>
-            <td colSpan={8} className="cv-title">
-              提成单&nbsp;&nbsp;COMMISSION VOUCHER
-            </td>
-          </tr>
-          <tr>
-            <td colSpan={8} className="cv-meta">
-              {!final && <span className="cv-stamp">{stamp}</span>}
-              编号 NO.&nbsp;{v.voucher_no ?? '—'}
-            </td>
-          </tr>
-          <tr>
-            <th>
-              日期
-              <br />
-              DATE
-            </th>
-            <td className="c">{v.voucher_date}</td>
-            <th>
-              申请部门
-              <br />
-              REQUESTING DEPT
-            </th>
-            <td>{bi(v.dept)}</td>
-            <th colSpan={2}>
-              业务员
-              <br />
-              SALESPERSON
-            </th>
-            <td colSpan={2}>{v.salesperson_name}</td>
-          </tr>
+    <div className="cv-sheet cv-simple">
+      <div className="cv-top">
+        <div>
+          <div className="cv-company">FET AUTO COMPANY LIMITED</div>
+          <div className="cv-title">提成单&nbsp;&nbsp;COMMISSION VOUCHER</div>
+        </div>
+        <div className="cv-top-right">
+          {!final && <span className="cv-stamp">{stamp}</span>}
+          <div className="cv-no">NO. {v.voucher_no ?? '—'}</div>
+          <div className="cv-en">日期 DATE {v.voucher_date}</div>
+        </div>
+      </div>
 
-          <tr>
-            <td colSpan={8} className="cv-section">
-              一、客户及车辆&nbsp;&nbsp;CUSTOMER &amp; VEHICLES
-            </td>
-          </tr>
-          <tr>
-            <th>
-              客户名称
-              <br />
-              CUSTOMER
-            </th>
-            <td colSpan={7}>{v.customer_name}</td>
-          </tr>
-          <tr>
-            <th>
-              数量与设备型号
-              <br />
-              QTY &amp; MODEL
-            </th>
-            <td colSpan={7}>{v.qty_model}</td>
-          </tr>
+      <div className="cv-info">
+        <div>
+          <div className="cv-label">客户 CUSTOMER</div>
+          <div className="cv-val">{v.customer_name}</div>
+        </div>
+        <div>
+          <div className="cv-label">业务员 SALESPERSON</div>
+          <div className="cv-val">{v.salesperson_name}</div>
+        </div>
+        <div>
+          <div className="cv-label">申请部门 DEPT</div>
+          <div className="cv-val">{bi(v.dept)}</div>
+        </div>
+        <div>
+          <div className="cv-label">数量与型号 QTY &amp; MODEL</div>
+          <div className="cv-val">{v.qty_model || `${tt.units} 台 UNITS`}</div>
+        </div>
+      </div>
+
+      <div className="cv-kpi">
+        <div className="cv-kpi-main">
+          <div className="cv-label">本次发放提成 TOTAL PAYOUT (USD)</div>
+          <div className="cv-kpi-num">{tt.payout == null ? '—' : `$ ${money(tt.payout)}`}</div>
+        </div>
+        {showGhs && (
+          <div className="cv-kpi-main">
+            <div className="cv-label">折合赛地 TOTAL PAYOUT (GHS)</div>
+            <div className="cv-kpi-num">GH₵ {money(tt.payoutGhs)}</div>
+          </div>
+        )}
+        <div>
+          <div className="cv-label">提成金额 COMMISSION (USD)</div>
+          <div className="cv-kpi-sub">{v.commission_usd == null ? '—' : `$ ${money(v.commission_usd)}`}</div>
+        </div>
+        <div>
+          <div className="cv-label">发放比例 PAYOUT RATIO</div>
+          <div className="cv-kpi-sub">{ratio == null ? '—' : `${Math.round(ratio * 10000) / 100}%`}</div>
+        </div>
+        {showGhs && !ownRates && (
+          <div>
+            <div className="cv-label">汇率 RATE GHS/USD</div>
+            <div className="cv-kpi-sub">{tt.payoutRate}</div>
+          </div>
+        )}
+        {showGhs && ownRates && (
+          <div>
+            <div className="cv-label">汇率 RATE GHS/USD</div>
+            <div className="cv-kpi-sub">按车 PER UNIT</div>
+          </div>
+        )}
+      </div>
+
+      <div className="cv-h">一、车辆&nbsp;&nbsp;VEHICLES</div>
+      <table className="cv-table cv-veh">
+        <colgroup>
+          {vehWidths.map((w, i) => (
+            <col key={i} style={{ width: `${w}%` }} />
+          ))}
+        </colgroup>
+        <thead>
           <tr className="cv-head">
-            <th>
-              序号
-              <br />
-              NO.
-            </th>
-            <th colSpan={2}>
-              大架号
-              <br />
-              CHASSIS NO.
-            </th>
-            <th colSpan={perCar == null ? 2 : 1}>
-              品牌/车型/规格
-              <br />
-              BRAND / MODEL
-            </th>
-            <th>
-              单价
-              <br />
-              UNIT PRICE (USD)
-            </th>
-            {perCar != null && (
-              <th>
-                本车提成
-                <br />
-                COMMISSION (USD)
-              </th>
-            )}
-            <th>
-              本车已到账 / 余额
-              <br />
-              PAID / BALANCE
-            </th>
-            <th>
-              备注
-              <br />
-              NOTE
-            </th>
+            <th>#</th>
+            <Th zh="大架号" en="CHASSIS NO." />
+            <Th zh="品牌 / 车型" en="BRAND / MODEL" />
+            <Th zh="单价" en="UNIT PRICE (USD)" />
+            {perCar != null && <Th zh="本车提成" en="COMMISSION (USD)" />}
+            {ownRates && <Th zh="汇率" en="RATE" />}
+            {ownRates && <Th zh="折合赛地" en="GHS" />}
+            <Th zh="已到账 / 余额" en="PAID / BALANCE" />
+            <Th zh="备注" en="NOTE" />
           </tr>
+        </thead>
+        <tbody>
           {vehicles.map((x, i) => {
             const paid = ledger?.get(x.vehicle_id)
+            const r = carRate(x)
             return (
               <tr key={x.vehicle_id}>
                 <td className="c">{i + 1}</td>
-                <td colSpan={2} className="cv-vin">
-                  {x.vin}
-                </td>
-                <td colSpan={perCar == null ? 2 : 1}>{x.model}</td>
+                <td className="cv-vin">{x.vin}</td>
+                <td>{x.model}</td>
                 <td className="r">{money(x.unit_price_usd)}</td>
                 {perCar != null && <td className="r">{x.commission_usd == null ? '' : money(x.commission_usd)}</td>}
+                {ownRates && <td className="r">{r ?? ''}</td>}
+                {ownRates && <td className="r">{r == null || x.commission_usd == null ? '' : money(round2(num(x.commission_usd) * r))}</td>}
                 <td className="r">
                   {paid && (
                     <>
                       {money(paid.received)}
                       <br />
-                      <span className="cv-trail-en">{paid.balance < 1 ? '已结清 PAID OFF' : `还差 ${money(paid.balance)}`}</span>
+                      <span className="cv-en">{paid.balance < 1 ? '已结清 PAID OFF' : `还差 BAL ${money(paid.balance)}`}</span>
                     </>
                   )}
                 </td>
@@ -212,132 +222,56 @@ export default function CommissionSheet({
               </tr>
             )
           })}
-          <tr>
-            <th>
-              台数合计
-              <br />
-              TOTAL UNITS
-            </th>
-            <td className="c b">{tt.units}</td>
-            <th colSpan={perCar == null ? 3 : 2}>车辆合计&nbsp;&nbsp;VEHICLES TOTAL (USD)</th>
+          <tr className="cv-sum">
+            <td className="c">{tt.units}</td>
+            <td colSpan={2}>合计&nbsp;&nbsp;TOTAL</td>
             <td className="r b">{money(tt.vehiclesUsd)}</td>
             {perCar != null && <td className="r b">{money(perCar)}</td>}
-            <td colSpan={2} />
+            {ownRates && <td />}
+            {ownRates && <td className="r b">{carGhsTotal == null ? '' : money(carGhsTotal)}</td>}
+            <td colSpan={vehCols - 4 - (perCar != null ? 1 : 0) - (ownRates ? 2 : 0)} />
           </tr>
+        </tbody>
+      </table>
+      {(has(v.other_charges_usd) || has(v.discount_usd) || v.remarks) && (
+        <div className="cv-line">
+          {has(v.other_charges_usd) && (
+            <span>
+              其他费用 OTHER CHARGES $ {money(v.other_charges_usd)}
+              {v.charges_note ? `（${v.charges_note}）` : ''}
+            </span>
+          )}
+          {has(v.discount_usd) && <span>折扣 DISCOUNT $ {money(v.discount_usd)}</span>}
+          {v.remarks && <span>备注 REMARKS：{v.remarks}</span>}
+        </div>
+      )}
 
-          <tr>
-            <td colSpan={8} className="cv-section">
-              二、销售及付款方式&nbsp;&nbsp;SALES &amp; PAYMENT TERMS
-            </td>
-          </tr>
-          <tr>
-            <th>
-              其他费用 (USD)
-              <br />
-              OTHER CHARGES
-            </th>
-            <td className="r">{amt(v.other_charges_usd)}</td>
-            <th>
-              费用说明
-              <br />
-              CHARGES NOTE
-            </th>
-            <td>{v.charges_note}</td>
-            <th colSpan={2}>
-              折扣
-              <br />
-              DISCOUNT (USD)
-            </th>
-            <td colSpan={2} className="r">
-              {amt(v.discount_usd)}
-            </td>
-          </tr>
-          <tr>
-            <th>
-              销售总金额 (USD)
-              <br />
-              TOTAL SALES
-            </th>
-            <td className="r b">{money(tt.totalSales)}</td>
-            <th>
-              是否全款
-              <br />
-              FULL PAYMENT
-            </th>
-            <td className="c">{v.full_payment === false ? '否 NO' : '是 YES'}</td>
-            <th colSpan={2}>
-              首付金额 (USD)
-              <br />
-              DOWN PAYMENT
-            </th>
-            <td colSpan={2} className="r">
-              {v.full_payment === false ? amt(v.down_payment_usd) : ''}
-            </td>
-          </tr>
-          <tr>
-            <th>
-              分期期数
-              <br />
-              NO. OF TERMS
-            </th>
-            <td className="c">{v.full_payment === false ? (v.terms_count ?? '') : ''}</td>
-            <th>
-              每期金额
-              <br />
-              PER TERM (USD)
-            </th>
-            <td className="r">{v.full_payment === false ? amt(v.per_term_usd) : ''}</td>
-            <th colSpan={2}>
-              已还 / 剩余期数
-              <br />
-              PAID / LEFT TERMS
-            </th>
-            <td className="c">{tt.termsPaid ?? ''}</td>
-            <td className="c">{tt.termsLeft ?? ''}</td>
-          </tr>
-
-          <tr>
-            <td colSpan={8} className="cv-section">
-              三、客户付款明细（每笔按当天汇率）&nbsp;&nbsp;PAYMENTS RECEIVED (each at the day&apos;s rate)
-            </td>
-          </tr>
+      <div className="cv-h">二、客户付款&nbsp;&nbsp;PAYMENTS RECEIVED</div>
+      <table className="cv-table cv-pay">
+        <colgroup>
+          {[12, 15, 17, 17, 8, 13, 18].map((w, i) => (
+            <col key={i} style={{ width: `${w}%` }} />
+          ))}
+        </colgroup>
+        <thead>
           <tr className="cv-head">
-            <th>
-              款项类型/期次
-              <br />
-              PAYMENT TYPE
-            </th>
-            <th>
-              收款日期
-              <br />
-              DATE
-            </th>
-            <th colSpan={2}>
-              本单收款金额
-              <br />
-              AMOUNT
-            </th>
-            <th>
-              币种
-              <br />
-              CURRENCY
-            </th>
-            <th>
-              当天汇率
-              <br />
-              RATE GHS/USD
-            </th>
-            <th>
-              折合美元
-              <br />
-              USD
-            </th>
-            <th>
-              备注（合付总额/分摊）
-              <br />
-              NOTE
-            </th>
+            <Th zh="日期" en="DATE" />
+            <Th zh="款项" en="TYPE" />
+            <Th zh="到账编号" en="RECEIPT" />
+            <Th zh="金额" en="AMOUNT" />
+            <Th zh="汇率" en="RATE" />
+            <Th zh="折合美元" en="USD" />
+            <Th zh="备注" en="NOTE" />
           </tr>
+        </thead>
+        <tbody>
+          {payments.length === 0 && (
+            <tr>
+              <td colSpan={7} className="c cv-en">
+                （还没有勾选付款 NO PAYMENTS SELECTED）
+              </td>
+            </tr>
+          )}
           {payments.map((p) => {
             const d = paymentDisplay(p)
             const note = [p.note, d.sharedFrom ? `合付 TOTAL ${d.sharedFrom}` : '', many && p.vin ? `VIN …${p.vin.slice(-6)}` : '']
@@ -345,155 +279,93 @@ export default function CommissionSheet({
               .join('; ')
             return (
               <tr key={p.claim_id}>
-                <td>{bi(p.nature)}</td>
                 <td className="c">{p.pay_date}</td>
-                <td colSpan={2} className="r">
-                  {money(d.amount)}
+                <td>{bi(p.nature)}</td>
+                <td className="cv-vin">{p.receipt_no ?? '期初 OPENING'}</td>
+                <td className="r">
+                  {d.currency} {money(d.amount)}
                 </td>
-                <td className="c">{d.currency}</td>
                 <td className="r">{d.rate ?? ''}</td>
                 <td className="r">{money(d.usd)}</td>
                 <td>{note}</td>
               </tr>
             )
           })}
-          <tr>
-            <th colSpan={6}>客户已支付金额合计&nbsp;&nbsp;TOTAL PAID BY CUSTOMER (USD)</th>
+          <tr className="cv-sum">
+            <td colSpan={5}>客户已支付合计&nbsp;&nbsp;TOTAL PAID BY CUSTOMER (USD)</td>
             <td className="r b">{money(tt.paid)}</td>
             <td className="cv-warn">{st.kind === 'overpaid' ? '⚠ 已付超过销售额 OVERPAID' : ''}</td>
           </tr>
-          <tr>
-            <th>
-              未付余额
-              <br />
-              BALANCE (USD)
-            </th>
-            <td className="r b">{money(tt.balance)}</td>
-            <th>
-              付款进度
-              <br />
-              PAYMENT PROGRESS
-            </th>
-            <td className="r">{tt.progress == null ? '' : `${(tt.progress * 100).toFixed(1)}%`}</td>
-            <th colSpan={2}>
-              分期情况
-              <br />
-              STATUS
-            </th>
-            <td colSpan={2} className={st.kind === 'overpaid' ? 'cv-warn' : ''}>
-              {fill(PAY_STATE_ZH[st.kind], payStateVars(st))} {payStateEn(st)}
-            </td>
-          </tr>
-
-          <tr>
-            <td colSpan={8} className="cv-section">
-              四、提成&nbsp;&nbsp;COMMISSION
-            </td>
-          </tr>
-          <tr>
-            <th>
-              提成金额 (USD)
-              <br />
-              COMMISSION
-            </th>
-            <td className="r">{v.commission_usd == null ? '' : money(v.commission_usd)}</td>
-            <th>
-              本次发放比例
-              <br />
-              PAYOUT RATIO
-            </th>
-            <td className="r">{v.payout_ratio == null ? '' : `${Math.round(num(v.payout_ratio) * 10000) / 100}%`}</td>
-            <th colSpan={2}>
-              备注
-              <br />
-              REMARKS
-            </th>
-            <td colSpan={2}>{v.remarks}</td>
-          </tr>
-          <tr>
-            <th colSpan={6}>本次发放提成合计&nbsp;&nbsp;TOTAL (USD)</th>
-            <td colSpan={2} className="r b cv-big">
-              {tt.payout == null ? '' : money(tt.payout)}
-            </td>
-          </tr>
-          {tt.payoutGhs != null && (
-            <tr>
-              <th colSpan={3}>
-                美元转赛地汇率
-                <br />
-                RATE GHS/USD
-              </th>
-              <td className="r">{tt.payoutRate}</td>
-              <th colSpan={2}>
-                折合赛地
-                <br />
-                TOTAL (GHS)
-              </th>
-              <td colSpan={2} className="r b cv-big">
-                {money(tt.payoutGhs)}
-              </td>
-            </tr>
-          )}
         </tbody>
       </table>
+      <div className="cv-line cv-balance">
+        <span>
+          销售总金额 TOTAL SALES <b>$ {money(tt.totalSales)}</b>
+        </span>
+        <span>
+          已付 PAID <b>$ {money(tt.paid)}</b>
+        </span>
+        <span>
+          未付余额 BALANCE <b>$ {money(tt.balance)}</b>
+          {tt.progress != null ? `（${(tt.progress * 100).toFixed(1)}%）` : ''}
+        </span>
+        <span className={st.kind === 'overpaid' ? 'cv-warn' : ''}>
+          {fill(PAY_STATE_ZH[st.kind], payStateVars(st))} {payStateEn(st)}
+        </span>
+        <span className="cv-en">{terms.join(' · ')}</span>
+      </div>
 
-      <div className="cv-sign" style={{ gridTemplateColumns: `repeat(${Math.min(flow.length + 1, 6)}, 1fr)` }}>
-        <Sign zh="制单人" en="PREPARED BY" name={v.prepared_name} at={v.prepared_at} />
+      <div className="cv-h">三、审批&nbsp;&nbsp;APPROVAL</div>
+      <div className="cv-flow">
+        <span className="cv-flow-step">
+          <span className="cv-label">制单 PREPARED BY</span>
+          <span className="cv-sign-name">{v.prepared_name ?? ''}</span>
+          <span className="cv-sign-date">{v.prepared_name ? shortDate(v.prepared_at) : ''}</span>
+        </span>
         {flow.map((f) => {
           const n = stepPrintNames(byKey.get(f.step), f.step)
-          return <Sign key={f.step} zh={n.zh} en={n.en} name={f.by_name} at={f.at} />
+          const waiting = !f.by_name && status === 'submitted' && v.step === f.step
+          return (
+            <span key={f.step} className="cv-flow-step">
+              <span className="cv-label">
+                {n.zh}
+                {n.en ? ` ${n.en}` : ''}
+              </span>
+              <span className="cv-sign-name">{f.by_name ?? (waiting ? '待审 PENDING' : '')}</span>
+              <span className="cv-sign-date">{f.by_name ? shortDate(f.at) : ''}</span>
+            </span>
+          )
         })}
       </div>
-      <div className="cv-sign-note">以上各级为线上审批，无需签字&nbsp;&nbsp;Approved online in the system; no signature required</div>
-      {status === 'paid' && (
-        <div className="cv-paid">
-          已发放 PAID OUT：{v.paid_on}
-          {v.paid_name ? ` · ${v.paid_name}` : ''}
-        </div>
-      )}
+      <div className="cv-sign-note">
+        以上各级为线上审批，无需签字&nbsp;&nbsp;Approved online in the system; no signature required
+        {status === 'paid' && (
+          <span className="cv-paid">
+            &nbsp;&nbsp;·&nbsp;&nbsp;已发放 PAID OUT {v.paid_on}
+            {v.paid_name ? ` · ${v.paid_name}` : ''}
+          </span>
+        )}
+      </div>
 
       {trail.length > 0 && (
         <table className="cv-table cv-trail">
           <colgroup>
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '37%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '38%' }} />
             <col style={{ width: '18%' }} />
-            <col style={{ width: '17%' }} />
-            <col style={{ width: '21%' }} />
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '22%' }} />
           </colgroup>
-          <tbody>
-            <tr>
-              <td colSpan={5} className="cv-section">
-                审批过程&nbsp;&nbsp;APPROVAL RECORD
-              </td>
-            </tr>
+          <thead>
             <tr className="cv-head">
-              <th>
-                序号
-                <br />
-                NO.
-              </th>
-              <th>
-                步骤
-                <br />
-                STEP
-              </th>
-              <th>
-                处理人
-                <br />
-                BY
-              </th>
-              <th>
-                时间
-                <br />
-                TIME
-              </th>
-              <th>
-                意见
-                <br />
-                NOTE
-              </th>
+              <th>#</th>
+              <Th zh="步骤" en="STEP" />
+              <Th zh="处理人" en="BY" />
+              <Th zh="时间" en="TIME" />
+              <Th zh="意见" en="NOTE" />
             </tr>
+          </thead>
+          <tbody>
             {trail.map((r, i) => {
               const a = TRAIL_PRINT[r.action] ?? { zh: r.action, en: '' }
               // 通过、退回写明是哪一级
@@ -517,26 +389,6 @@ export default function CommissionSheet({
           </tbody>
         </table>
       )}
-    </div>
-  )
-}
-
-function Sign({ zh, en, name, at }: { zh: string; en: string; name: string | null; at: string | null }) {
-  return (
-    <div>
-      <div className="cv-sign-label">
-        {zh}
-        {en ? (
-          <>
-            <br />
-            {en}:
-          </>
-        ) : (
-          ':'
-        )}
-      </div>
-      <div className="cv-sign-name">{name ?? ''}</div>
-      <div className="cv-sign-date">{name ? shortDate(at) : ''}</div>
     </div>
   )
 }

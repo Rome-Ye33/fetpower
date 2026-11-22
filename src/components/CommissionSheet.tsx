@@ -69,7 +69,7 @@ export default function CommissionSheet({
   v: CommissionVoucher
   trail?: ApprovalLog[]
   /** 每台车现在的到账情况（车辆台账里的数，不是这张单上的）：结清了没有、还差多少 */
-  ledger?: Map<number, { received: number; balance: number }>
+  ledger?: Map<number, { received: number; balance: number; settled: boolean }>
 }) {
   const vehicles = parseVehicles(v.vehicles)
   const payments = parsePayments(v.payments)
@@ -223,7 +223,7 @@ export default function CommissionSheet({
                     <>
                       {money(paid.received)}
                       <br />
-                      <span className="cv-en">{paid.balance < 1 ? '已结清 PAID OFF' : `还差 BAL ${money(paid.balance)}`}</span>
+                      <span className="cv-en">{paid.settled ? '已结清 PAID OFF' : `还差 BAL ${money(paid.balance)}`}</span>
                     </>
                   )}
                 </td>

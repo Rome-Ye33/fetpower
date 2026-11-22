@@ -35,7 +35,7 @@ function PrintOne({ id }: { id: string | undefined }) {
   /** 审批过程（approval_logs）：读完才出单，免得打印时还没出来 */
   const [trail, setTrail] = useState<ApprovalLog[] | null>(null)
   /** 每台车现在的到账情况（车辆台账）：一张单上可以混着结清和没结清的车，印出来要看得出是哪几台 */
-  const [ledger, setLedger] = useState<Map<number, { received: number; balance: number }> | null>(null)
+  const [ledger, setLedger] = useState<Map<number, { received: number; balance: number; settled: boolean }> | null>(null)
   const [err, setErr] = useState<string | null>(null)
   /** 缩到一页（默认缩）；去掉勾就按原大小，放不下就打两页 */
   const [fit, setFit] = useState(true)
@@ -76,17 +76,17 @@ function PrintOne({ id }: { id: string | undefined }) {
     }
   }, [id, t])
 
-  // 每台车现在的到账情况（车辆台账里的数）
+  // 每台车现在的到账情况（车辆台账里的数）；结清与否按台账的 can_transfer（49 起差 5 美元以内算结清），不自己比余额
   useEffect(() => {
     if (!vids.length) return
     let alive = true
     void supabase
       .from('v_vehicle_ledger')
-      .select('id,received_usd,balance_usd')
+      .select('id,received_usd,balance_usd,can_transfer')
       .in('id', vids)
       .then(({ data }) => {
         // 读不到就空着这一栏，单子照出
-        if (alive) setLedger(new Map((data ?? []).map((r) => [Number(r.id), { received: num(r.received_usd), balance: num(r.balance_usd) }])))
+        if (alive) setLedger(new Map((data ?? []).map((r) => [Number(r.id), { received: num(r.received_usd), balance: num(r.balance_usd), settled: r.can_transfer == null ? num(r.balance_usd) < 1 : !!r.can_transfer }])))
       })
     return () => {
       alive = false

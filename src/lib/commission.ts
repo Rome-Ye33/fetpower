@@ -190,6 +190,12 @@ export type VoucherTotals = {
   payoutRate: number | null
   /** 本次发放提成折合赛地，没填汇率为 null */
   payoutGhs: number | null
+  /** 额外奖励（USD，48）：整单一个数，不挂车、不乘发放比例；没有就是 0 */
+  bonus: number
+  /** 本次发放合计 = 提成 × 比例 + 奖励；提成或比例没填为 null */
+  payTotal: number | null
+  /** 合计折合赛地：提成部分按 payoutGhs，奖励按整单汇率；有奖励但整单没汇率就算不出（null） */
+  payTotalGhs: number | null
 }
 
 type TotalsInput = {
@@ -208,6 +214,8 @@ type TotalsInput = {
   payoutRate?: number | null
   /** 每台车分开填了提成和汇率的（47）：Σ 本车提成 × 本车汇率（没乘比例）；null = 有车算不出；undefined = 没分开填 */
   perCarGhs?: number | null
+  /** 额外奖励（USD，48）：全额发、不乘比例、不挂车 */
+  bonus?: number | null
 }
 
 /** 余额差 1 美元以内算付清（系统里美元保留两位小数，模板是四舍五入到整数） */
@@ -249,6 +257,11 @@ export function voucherTotals(i: TotalsInput): VoucherTotals {
     if (i.perCarGhs === undefined) payoutGhs = rate != null ? round2(payout * rate) : null
     else if (i.perCarGhs != null && ratio != null) payoutGhs = round2(num(ratio) * i.perCarGhs)
   }
+  // 额外奖励（48）：加在提成之后，不乘比例；折合赛地只能按整单汇率（奖励不挂车）
+  const bonus = num(i.bonus) > 0 ? round2(num(i.bonus)) : 0
+  const payTotal = payout == null ? null : round2(payout + bonus)
+  let payTotalGhs: number | null = null
+  if (payoutGhs != null) payTotalGhs = bonus > 0 ? (rate != null ? round2(payoutGhs + bonus * rate) : null) : payoutGhs
   return {
     units: i.vehiclePrices.length,
     vehiclesUsd,
@@ -262,6 +275,9 @@ export function voucherTotals(i: TotalsInput): VoucherTotals {
     payout,
     payoutRate: rate,
     payoutGhs,
+    bonus,
+    payTotal,
+    payTotalGhs,
   }
 }
 
@@ -281,6 +297,7 @@ export function savedTotals(v: CommissionVoucher): VoucherTotals {
     payoutRatio: v.payout_ratio,
     payoutRate: v.payout_rate,
     perCarGhs: perCarGhs(vehicles, v.payout_rate),
+    bonus: v.bonus_usd,
   })
 }
 

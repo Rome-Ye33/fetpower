@@ -1392,6 +1392,14 @@ const UI: Record<string, string> = {
     "Some units have their own rate: the GHS total is each unit's commission at its own rate, added up; the printed voucher shows the rate and GHS per unit.",
   "有的车没填汇率、整单也没填汇率，所以算不出折合赛地；填上整单汇率或把每台车的汇率都填上":
     "Some units have no rate and the voucher has none either, so the GHS amount can't be worked out. Fill in the voucher rate or a rate for every unit.",
+  // 2026-11-22 额外奖励（整单一个数，不挂车、不乘比例、全额发）
+  "额外奖励（USD）": "Bonus (USD)",
+  "奖励说明": "Bonus note",
+  "额外奖励": "Bonus",
+  "合计发放": "Total to pay",
+  "整单一个数，不挂在任何一台车上，也不乘发放比例，全额发；没有就空着": "One amount for the whole voucher, not tied to any unit and not multiplied by the payout ratio: it is paid in full. Leave blank if none.",
+  "如：季度销售冠军奖": "e.g. quarterly top-seller award",
+  "填了额外奖励但整单没填汇率：奖励折不了赛地，所以合计折合赛地空着；填上整单汇率就有了": "A bonus is entered but the voucher has no rate, so the bonus can't be converted to cedis and the total in cedis is blank. Enter the voucher rate to show it.",
   "每台车都填了提成，这里就是它们相加": "Every vehicle has its own commission, so this is their sum",
   "提成金额是上面每台车填的提成相加，要改在车辆那一栏改；都清空就回到整单填一个数": "The commission is the sum of the per-vehicle amounts above; edit them in the vehicle table. Clear them all to go back to one amount for the whole voucher",
   "已到账 / 余额": "Received / balance",

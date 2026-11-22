@@ -86,6 +86,9 @@ type Head = {
   payout_pct: number | null
   /** 美元转赛地汇率（1 美元 = ? 赛地）：有人要美元、有人要赛地，打印时两个金额都印 */
   payout_rate: number | null
+  /** 额外奖励（USD，48）：整单一个数，不挂在任何一台车上、不乘发放比例、全额发 */
+  bonus_usd: number | null
+  bonus_note: string
   remarks: string
 }
 
@@ -122,6 +125,8 @@ function newHead(spId: number | null, dept: string): Head {
     commission_usd: null,
     payout_pct: 100,
     payout_rate: null,
+    bonus_usd: null,
+    bonus_note: '',
     remarks: '',
   }
 }
@@ -143,6 +148,8 @@ function headFrom(v: CommissionVoucher): Head {
     commission_usd: optNum(v.commission_usd),
     payout_pct: v.payout_ratio != null ? round2(num(v.payout_ratio) * 100) : null,
     payout_rate: optNum(v.payout_rate),
+    bonus_usd: num(v.bonus_usd) ? num(v.bonus_usd) : null,
+    bonus_note: v.bonus_note ?? '',
     remarks: v.remarks ?? '',
   }
 }
@@ -453,6 +460,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
       payoutRatio: head.payout_pct == null ? null : head.payout_pct / 100,
       payoutRate: head.payout_rate,
       perCarGhs: perCarGhsSum,
+      bonus: head.bonus_usd,
     })
   }, [editable, voucher, sel, ledgerById, claimById, head, perCar, perCarGhsSum])
 
@@ -586,6 +594,8 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
     payout_ratio: head.payout_pct == null ? null : Math.round(head.payout_pct * 100) / 10000,
     payout_rate: head.payout_rate,
     remarks: head.remarks,
+    bonus_usd: head.bonus_usd ?? 0,
+    bonus_note: head.bonus_note,
     vehicles: sel.veh.map((r) => ({ vehicle_id: r.vehicle_id, note: r.note, commission_usd: r.commission, payout_rate: r.commission == null ? null : r.rate })),
     payments: sel.pay.map((p) => ({ claim_id: p.claim_id, share_usd: p.share_usd, note: p.note })),
   })
@@ -1482,16 +1492,50 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
                 </Form.Item>
               </Col>
             </Row>
+            {/* 额外奖励（Rome 2026-11-22）：整单一个数，不挂车、不乘比例、全额发；看单时没有奖励就不占地方 */}
+            {(editable || num(head.bonus_usd) > 0) && (
+              <Row gutter={12}>
+                <Col xs={12} md={6}>
+                  <Form.Item label={t('额外奖励（USD）')} tooltip={t('整单一个数，不挂在任何一台车上，也不乘发放比例，全额发；没有就空着')}>
+                    <InputNumber
+                      min={0}
+                      precision={2}
+                      prefix="$"
+                      style={{ width: '100%' }}
+                      className="cv-bonus"
+                      value={head.bonus_usd}
+                      onChange={(x) => edit({ bonus_usd: x == null ? null : Number(x) })}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={18}>
+                  <Form.Item label={t('奖励说明')}>
+                    <Input className="cv-bonus-note" value={head.bonus_note} placeholder={t('如：季度销售冠军奖')} onChange={(e) => edit({ bonus_note: e.target.value })} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            )}
           </Form>
           <Typography.Text strong>
             {t('本次发放提成合计')}：<span className="num">{totals.payout == null ? '—' : usd2(totals.payout)}</span>
-            {totals.payoutGhs != null && (
+            {totals.bonus > 0 && (
+              <>
+                <span style={{ margin: '0 6px' }}>+</span>
+                {t('额外奖励')}：<span className="num">{usd2(totals.bonus)}</span>
+                <span style={{ margin: '0 6px' }}>=</span>
+                {t('合计发放')}：<span className="num cv-pay-total">{totals.payTotal == null ? '—' : usd2(totals.payTotal)}</span>
+              </>
+            )}
+            {totals.payTotalGhs != null && (
               <>
                 <span style={{ margin: '0 6px' }}>·</span>
-                {t('折合赛地')}：<span className="num">{ghs2(totals.payoutGhs)}</span>
+                {t('折合赛地')}：<span className="num">{ghs2(totals.payTotalGhs)}</span>
               </>
             )}
           </Typography.Text>
+          {totals.bonus > 0 && totals.payoutGhs != null && totals.payTotalGhs == null && (
+            <div className="hint">{t('填了额外奖励但整单没填汇率：奖励折不了赛地，所以合计折合赛地空着；填上整单汇率就有了')}</div>
+          )}
           {perCar != null && <div className="hint">{t('提成金额是上面每台车填的提成相加，要改在车辆那一栏改；都清空就回到整单填一个数')}</div>}
           {totals.payoutGhs != null && !mixedRates && (
             <div className="hint">{t('有人要美元、有人要赛地，打印的单子上两个金额都印，汇率按 1 美元 = {rate} 赛地', { rate: totals.payoutRate ?? 0 })}</div>
@@ -1558,11 +1602,20 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
         onCancel={() => setPaying(false)}
       >
         <Typography.Paragraph>
-          {t('本次发放提成合计')}：<b className="num">{usd2(totals.payout)}</b>
-          {totals.payoutGhs != null && (
+          {totals.bonus > 0 ? (
+            <>
+              {t('合计发放')}：<b className="num">{usd2(totals.payTotal)}</b>
+              <span style={{ margin: '0 6px' }}>（{t('提成')} {usd2(totals.payout)} + {t('额外奖励')} {usd2(totals.bonus)}）</span>
+            </>
+          ) : (
+            <>
+              {t('本次发放提成合计')}：<b className="num">{usd2(totals.payout)}</b>
+            </>
+          )}
+          {totals.payTotalGhs != null && (
             <>
               <span style={{ margin: '0 6px' }}>·</span>
-              <b className="num">{ghs2(totals.payoutGhs)}</b>
+              <b className="num">{ghs2(totals.payTotalGhs)}</b>
             </>
           )}
         </Typography.Paragraph>

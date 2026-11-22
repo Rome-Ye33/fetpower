@@ -80,7 +80,8 @@ export default function CommissionPage() {
       render: (x) => <span className={`num ${Number(x) > 1 ? 'text-danger' : ''}`}>{usd2(x)}</span>,
     },
     { title: t('提成'), dataIndex: 'commission_usd', width: 100, align: 'right', render: (x) => <span className="num">{usd2(x)}</span> },
-    { title: t('本次发放'), dataIndex: 'payout_usd', width: 100, align: 'right', render: (x) => <b className="num">{usd2(x)}</b> },
+    // 本次发放 = 提成 × 比例 + 额外奖励（48 的 pay_total_usd；48 没跑之前没有这一列，就只显示提成部分）
+    { title: t('本次发放'), dataIndex: 'payout_usd', width: 100, align: 'right', render: (_, r) => <b className="num">{usd2(r.pay_total_usd ?? r.payout_usd)}</b> },
     {
       title: t('状态'),
       dataIndex: 'status',

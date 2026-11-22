@@ -94,7 +94,8 @@ export default function CommissionSheet({
   const carRate = (x: { commission_usd: number | null; payout_rate: number | null }) => (x.commission_usd == null ? null : num(x.payout_rate) > 0 ? num(x.payout_rate) : headRate)
   /** 有车填了和整单不一样的汇率：车辆表多印「汇率」「折合赛地」两列 */
   const ownRates = perCar != null && vehicles.some((x) => x.commission_usd != null && x.payout_rate != null && x.payout_rate !== headRate)
-  const showGhs = tt.payoutGhs != null
+  /** 折合赛地印合计的（提成部分 + 奖励）；有奖励但整单没汇率就折不了，整块不印 */
+  const showGhs = tt.payTotalGhs != null
   const carGhsTotal = ownRates ? round2(vehicles.reduce((s, x) => s + (carRate(x) != null ? num(x.commission_usd) * (carRate(x) as number) : 0), 0)) : null
   /** 车辆表各列的宽度（%）：按有没有「本车提成」「汇率 / 折合赛地」三种情况分配，加起来 100 */
   const vehWidths = ownRates ? [4, 21, 14, 11, 11, 7, 11, 13, 8] : perCar != null ? [5, 20, 24, 12, 12, 15, 12] : [5, 22, 31, 13, 16, 13]
@@ -145,19 +146,27 @@ export default function CommissionSheet({
 
       <div className="cv-kpi">
         <div className="cv-kpi-main">
-          <div className="cv-label">本次发放提成 TOTAL PAYOUT (USD)</div>
-          <div className="cv-kpi-num">{tt.payout == null ? '—' : `$ ${money(tt.payout)}`}</div>
+          <div className="cv-label">{tt.bonus > 0 ? '本次发放合计 TOTAL PAYOUT (USD)' : '本次发放提成 TOTAL PAYOUT (USD)'}</div>
+          <div className="cv-kpi-num">{tt.payTotal == null ? '—' : `$ ${money(tt.payTotal)}`}</div>
         </div>
         {showGhs && (
           <div className="cv-kpi-main">
             <div className="cv-label">折合赛地 TOTAL PAYOUT (GHS)</div>
-            <div className="cv-kpi-num">GH₵ {money(tt.payoutGhs)}</div>
+            <div className="cv-kpi-num">GH₵ {money(tt.payTotalGhs)}</div>
           </div>
         )}
         <div>
           <div className="cv-label">提成金额 COMMISSION (USD)</div>
           <div className="cv-kpi-sub">{v.commission_usd == null ? '—' : `$ ${money(v.commission_usd)}`}</div>
         </div>
+        {tt.bonus > 0 && (
+          // 额外奖励（48）：整单一个数、不挂车、不乘比例，全额加在提成之后
+          <div className="cv-kpi-bonus">
+            <div className="cv-label">额外奖励 BONUS (USD)</div>
+            <div className="cv-kpi-sub">$ {money(tt.bonus)}</div>
+            {v.bonus_note && <div className="cv-kpi-note">{v.bonus_note}</div>}
+          </div>
+        )}
         <div>
           <div className="cv-label">发放比例 PAYOUT RATIO</div>
           <div className="cv-kpi-sub">{ratio == null ? '—' : `${Math.round(ratio * 10000) / 100}%`}</div>

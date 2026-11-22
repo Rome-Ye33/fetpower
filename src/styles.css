@@ -761,6 +761,11 @@ html[lang='en'] .logo-name {
   margin-top: 1px;
   word-break: break-word;
 }
+/* 提成单编辑页 三、客户付款明细 下面「另有 N 笔没定大架号的到账没算进来」（Rome 2026-11-22 整块锁死） */
+.cv-pay-unlocked {
+  margin-top: 4px;
+  color: #d46b08;
+}
 .cv-h {
   font-weight: 700;
   font-size: 11px;

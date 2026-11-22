@@ -277,7 +277,7 @@ export default function CommissionSheet({
           {payments.length === 0 && (
             <tr>
               <td colSpan={7} className="c cv-en">
-                （还没有勾选付款 NO PAYMENTS SELECTED）
+                （还没有到账 NO PAYMENTS RECEIVED）
               </td>
             </tr>
           )}

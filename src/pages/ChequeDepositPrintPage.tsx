@@ -42,6 +42,21 @@ function byDeposit(a: Cheque, b: Cheque): number {
   )
 }
 
+/**
+ * 周六、周日：Rome 2026-11-23「看下到期日为周末的标注下，打印出来的时候」（银行周末不开门）。
+ * 到期日期下面、计划存票日期和抬头的存票日期后面，是周末就加一个黑框粗字的「周六 SAT」「周日 SUN」，黑白打印也看得出来。
+ */
+function weekendOf(d: string | null | undefined): string {
+  if (!d) return ''
+  const wd = new Date(d + 'T00:00:00Z').getUTCDay()
+  return wd === 6 ? '周六 SAT' : wd === 0 ? '周日 SUN' : ''
+}
+
+function WeekendTag({ d }: { d: string | null | undefined }) {
+  const w = weekendOf(d)
+  return w ? <span className="cdf-weekend">{w}</span> : null
+}
+
 /** 合同序号 · 第几期/共几期，例如 372 · 3/6 */
 function instText(c: Cheque): string {
   const parts: string[] = []
@@ -294,7 +309,15 @@ function PrintForm({ ids }: { ids: number[] }) {
               </div>
               <div className="cdf-meta">
                 <span>
-                  存票日期 DEPOSIT DATE：{depositDate ? <b>{depositDate}</b> : <span className="cdf-line" />}
+                  存票日期 DEPOSIT DATE：
+                  {depositDate ? (
+                    <>
+                      <b>{depositDate}</b>
+                      <WeekendTag d={depositDate} />
+                    </>
+                  ) : (
+                    <span className="cdf-line" />
+                  )}
                 </span>
                 <span>
                   共 {list.length} 张 TOTAL {list.length} {list.length === 1 ? 'CHEQUE' : 'CHEQUES'}
@@ -379,9 +402,19 @@ function PrintForm({ ids }: { ids: number[] }) {
                           {c.cheque_no}
                           {c.drawer_bank && <div className="cdf-sub">{c.drawer_bank}</div>}
                         </td>
-                        <td className="c cdf-nowrap">
+                        <td className="c cdf-nowrap cdf-due">
                           {c.due_date ?? ''}
-                          {c.plan_date && c.plan_date !== c.due_date && <div className="cdf-sub">计划 PLAN {c.plan_date}</div>}
+                          {weekendOf(c.due_date) && (
+                            <div>
+                              <WeekendTag d={c.due_date} />
+                            </div>
+                          )}
+                          {c.plan_date && c.plan_date !== c.due_date && (
+                            <div className="cdf-sub">
+                              计划 PLAN {c.plan_date}
+                              <WeekendTag d={c.plan_date} />
+                            </div>
+                          )}
                         </td>
                         <td className="c">{instText(c)}</td>
                         <td>{c.salesperson_name ?? ''}</td>

@@ -872,6 +872,22 @@ html[lang='en'] .logo-name {
 .cdf-sub {
   font-size: 9px;
 }
+/* 日期是周六、周日的（银行不开门，Rome 2026-11-23）：黑框粗字的「周六 SAT」，黑白打印也显眼；到期日期的在日期下面，其他的跟在日期后面 */
+.cdf-weekend {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0 3px;
+  border: 1px solid #000;
+  border-radius: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 12px;
+  white-space: nowrap;
+}
+.cdf-sub .cdf-weekend,
+.cdf-meta .cdf-weekend {
+  margin: 0 0 0 4px;
+}
 /* 空白支票：最后一栏留一格给业务部手写金额，左上角印币种 */
 .cdf-table td.cdf-confirm {
   vertical-align: top;

@@ -35,6 +35,8 @@ import {
   paymentDisplay,
   payStateVars,
   perCarCommission,
+  perCarGhs,
+  hasOwnRates,
   printVoucher,
   qtyModelText,
   savedTotals,
@@ -84,10 +86,13 @@ type Head = {
   payout_pct: number | null
   /** 美元转赛地汇率（1 美元 = ? 赛地）：有人要美元、有人要赛地，打印时两个金额都印 */
   payout_rate: number | null
+  /** 额外奖励（USD，48）：整单一个数，不挂在任何一台车上、不乘发放比例、全额发 */
+  bonus_usd: number | null
+  bonus_note: string
   remarks: string
 }
 
-type VehRow = { vehicle_id: number; note: string; commission: number | null }
+type VehRow = { vehicle_id: number; note: string; commission: number | null; rate: number | null }
 type PayRow = { claim_id: number; share_usd: number | null; note: string }
 type Sel = { veh: VehRow[]; pay: PayRow[] }
 /** 同一个客户的其他提成单（提示重复算） */
@@ -120,6 +125,8 @@ function newHead(spId: number | null, dept: string): Head {
     commission_usd: null,
     payout_pct: 100,
     payout_rate: null,
+    bonus_usd: null,
+    bonus_note: '',
     remarks: '',
   }
 }
@@ -141,6 +148,8 @@ function headFrom(v: CommissionVoucher): Head {
     commission_usd: optNum(v.commission_usd),
     payout_pct: v.payout_ratio != null ? round2(num(v.payout_ratio) * 100) : null,
     payout_rate: optNum(v.payout_rate),
+    bonus_usd: num(v.bonus_usd) ? num(v.bonus_usd) : null,
+    bonus_note: v.bonus_note ?? '',
     remarks: v.remarks ?? '',
   }
 }
@@ -243,7 +252,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
       setVoucher(data)
       setHead(headFrom(data))
       setSel({
-        veh: parseVehicles(data.vehicles).map((v) => ({ vehicle_id: v.vehicle_id, note: v.note ?? '', commission: v.commission_usd })),
+        veh: parseVehicles(data.vehicles).map((v) => ({ vehicle_id: v.vehicle_id, note: v.note ?? '', commission: v.commission_usd, rate: v.payout_rate })),
         pay: parsePayments(data.payments).map((p) => ({ claim_id: p.claim_id, share_usd: p.share_usd, note: p.note ?? '' })),
       })
       setAtts(data.attachments ?? [])
@@ -428,6 +437,13 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
 
   /** 每台车分开填的提成之和（有车填了就以它为准，整单那个框跟着显示、不让手改） */
   const perCar = useMemo(() => perCarCommission(sel.veh.map((r) => ({ commission_usd: r.commission }))), [sel.veh])
+  /** 每台车按自己的汇率折的赛地（没乘比例）；没分开填提成的是 undefined */
+  const perCarGhsSum = useMemo(
+    () => perCarGhs(sel.veh.map((r) => ({ commission_usd: r.commission, payout_rate: r.rate })), head.payout_rate),
+    [sel.veh, head.payout_rate],
+  )
+  /** 有车填了和整单不一样的汇率：合计旁边不再写“汇率按 1 美元 = X” */
+  const mixedRates = useMemo(() => hasOwnRates(sel.veh.map((r) => ({ commission_usd: r.commission, payout_rate: r.rate })), head.payout_rate), [sel.veh, head.payout_rate])
 
   const totals = useMemo(() => {
     if (!editable && voucher) return savedTotals(voucher)
@@ -443,8 +459,10 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
       commission: perCar ?? head.commission_usd,
       payoutRatio: head.payout_pct == null ? null : head.payout_pct / 100,
       payoutRate: head.payout_rate,
+      perCarGhs: perCarGhsSum,
+      bonus: head.bonus_usd,
     })
-  }, [editable, voucher, sel, ledgerById, claimById, head, perCar])
+  }, [editable, voucher, sel, ledgerById, claimById, head, perCar, perCarGhsSum])
 
   /** 选车以后自动带出的：数量与设备型号、折扣（系统里的优惠折让）、是否全款和首付、发放比例。手改过的不再覆盖 */
   const withAuto = (h: Head, vs: Vehicle[]): Head => {
@@ -505,7 +523,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   const setVehicles = (ids: number[]) => {
     setDirty(true)
     const keep = new Map(sel.veh.map((r) => [r.vehicle_id, r]))
-    const veh = ids.map((vid) => keep.get(vid) ?? { vehicle_id: vid, note: '', commission: null })
+    const veh = ids.map((vid) => keep.get(vid) ?? { vehicle_id: vid, note: '', commission: null, rate: null })
     const vids = new Set(ids)
     const added = new Set(ids.filter((vid) => !keep.has(vid)))
     const pay = sel.pay.filter((p) => {
@@ -530,6 +548,11 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   const setVehComm = (vid: number, commission: number | null) => {
     setDirty(true)
     setSel((s) => ({ ...s, veh: s.veh.map((r) => (r.vehicle_id === vid ? { ...r, commission } : r)) }))
+  }
+  /** 这台车自己的转赛地汇率（47）：不填就用整单的 */
+  const setVehRate = (vid: number, rate: number | null) => {
+    setDirty(true)
+    setSel((s) => ({ ...s, veh: s.veh.map((r) => (r.vehicle_id === vid ? { ...r, rate } : r)) }))
   }
 
   /** 勾选付款：车上的默认整笔；大架号未锁定的（可能分给几张单）默认扣掉别的单子已经算的 */
@@ -571,7 +594,9 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
     payout_ratio: head.payout_pct == null ? null : Math.round(head.payout_pct * 100) / 10000,
     payout_rate: head.payout_rate,
     remarks: head.remarks,
-    vehicles: sel.veh.map((r) => ({ vehicle_id: r.vehicle_id, note: r.note, commission_usd: r.commission })),
+    bonus_usd: head.bonus_usd ?? 0,
+    bonus_note: head.bonus_note,
+    vehicles: sel.veh.map((r) => ({ vehicle_id: r.vehicle_id, note: r.note, commission_usd: r.commission, payout_rate: r.commission == null ? null : r.rate })),
     payments: sel.pay.map((p) => ({ claim_id: p.claim_id, share_usd: p.share_usd, note: p.note })),
   })
 
@@ -832,6 +857,26 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
       ),
     },
     {
+      // 每台车的转赛地汇率可以不一样（Rome 2026-11-21）；不填就按整单的汇率，没填本车提成的车不用填
+      title: t('本车汇率'),
+      width: 110,
+      align: 'right',
+      render: (_, r) => (
+        <InputNumber
+          size="small"
+          min={0.0001}
+          precision={4}
+          controls={false}
+          className="cv-veh-rate"
+          style={{ width: '100%' }}
+          placeholder={head.payout_rate != null ? String(head.payout_rate) : t('同整单')}
+          disabled={r.commission == null}
+          value={r.rate}
+          onChange={(x) => setVehRate(r.vehicle_id, x == null ? null : Number(x))}
+        />
+      ),
+    },
+    {
       title: t('已到账 / 余额'),
       width: 150,
       render: (_, r) => {
@@ -858,8 +903,9 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
     },
   ]
 
-  /** 存好的单子里每台车有没有自己的提成（有才多那一列） */
+  /** 存好的单子里每台车有没有自己的提成（有才多那一列）；有没有自己的汇率（有才多汇率那一列） */
   const savedPerCar = savedVehicles.some((x) => x.commission_usd != null)
+  const savedOwnRates = savedVehicles.some((x) => x.payout_rate != null)
   const savedVehColumns: ColumnsType<VoucherVehicle> = [
     { title: t('序号'), width: 56, render: (_, __, i) => i + 1 },
     { title: t('大架号'), dataIndex: 'vin', width: 190, render: (x: string) => <b>{x}</b> },
@@ -868,6 +914,9 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
     { title: t('单价（USD）'), dataIndex: 'unit_price_usd', width: 120, align: 'right', render: (x: number) => <span className="num">{usd2(x)}</span> },
     ...(savedPerCar
       ? [{ title: t('本车提成'), dataIndex: 'commission_usd', width: 120, align: 'right' as const, render: (x: number | null) => <span className="num">{x == null ? '' : usd2(x)}</span> }]
+      : []),
+    ...(savedOwnRates
+      ? [{ title: t('本车汇率'), dataIndex: 'payout_rate', width: 100, align: 'right' as const, render: (x: number | null) => <span className="num">{x == null ? '' : String(num(x))}</span> }]
       : []),
     { title: t('其他提成单'), width: 130, render: (_, r) => othersTags(vehOthers(r.vehicle_id)) },
     { title: t('备注'), dataIndex: 'note', ellipsis: true },
@@ -1443,19 +1492,57 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
                 </Form.Item>
               </Col>
             </Row>
+            {/* 额外奖励（Rome 2026-11-22）：整单一个数，不挂车、不乘比例、全额发；看单时没有奖励就不占地方 */}
+            {(editable || num(head.bonus_usd) > 0) && (
+              <Row gutter={12}>
+                <Col xs={12} md={6}>
+                  <Form.Item label={t('额外奖励（USD）')} tooltip={t('整单一个数，不挂在任何一台车上，也不乘发放比例，全额发；没有就空着')}>
+                    <InputNumber
+                      min={0}
+                      precision={2}
+                      prefix="$"
+                      style={{ width: '100%' }}
+                      className="cv-bonus"
+                      value={head.bonus_usd}
+                      onChange={(x) => edit({ bonus_usd: x == null ? null : Number(x) })}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={18}>
+                  <Form.Item label={t('奖励说明')}>
+                    <Input className="cv-bonus-note" value={head.bonus_note} placeholder={t('如：季度销售冠军奖')} onChange={(e) => edit({ bonus_note: e.target.value })} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            )}
           </Form>
           <Typography.Text strong>
             {t('本次发放提成合计')}：<span className="num">{totals.payout == null ? '—' : usd2(totals.payout)}</span>
-            {totals.payoutGhs != null && (
+            {totals.bonus > 0 && (
+              <>
+                <span style={{ margin: '0 6px' }}>+</span>
+                {t('额外奖励')}：<span className="num">{usd2(totals.bonus)}</span>
+                <span style={{ margin: '0 6px' }}>=</span>
+                {t('合计发放')}：<span className="num cv-pay-total">{totals.payTotal == null ? '—' : usd2(totals.payTotal)}</span>
+              </>
+            )}
+            {totals.payTotalGhs != null && (
               <>
                 <span style={{ margin: '0 6px' }}>·</span>
-                {t('折合赛地')}：<span className="num">{ghs2(totals.payoutGhs)}</span>
+                {t('折合赛地')}：<span className="num">{ghs2(totals.payTotalGhs)}</span>
               </>
             )}
           </Typography.Text>
+          {totals.bonus > 0 && totals.payoutGhs != null && totals.payTotalGhs == null && (
+            <div className="hint">{t('填了额外奖励但整单没填汇率：奖励折不了赛地，所以合计折合赛地空着；填上整单汇率就有了')}</div>
+          )}
           {perCar != null && <div className="hint">{t('提成金额是上面每台车填的提成相加，要改在车辆那一栏改；都清空就回到整单填一个数')}</div>}
-          {totals.payoutGhs != null && (
+          {totals.payoutGhs != null && !mixedRates && (
             <div className="hint">{t('有人要美元、有人要赛地，打印的单子上两个金额都印，汇率按 1 美元 = {rate} 赛地', { rate: totals.payoutRate ?? 0 })}</div>
+          )}
+          {totals.payoutGhs != null && mixedRates && <div className="hint">{t('有的车填了自己的汇率：折合赛地是每台车按各自的汇率算好再相加，打印的单子上每台车都印汇率和赛地')}</div>}
+          {perCar != null && totals.payoutGhs == null && perCarGhsSum === null && (
+            <div className="hint">{t('有的车没填汇率、整单也没填汇率，所以算不出折合赛地；填上整单汇率或把每台车的汇率都填上')}</div>
           )}
         </Card>
         <Card size="small" title={t('附件')} className="cv-attachments" style={{ marginTop: 12 }}>
@@ -1515,11 +1602,20 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
         onCancel={() => setPaying(false)}
       >
         <Typography.Paragraph>
-          {t('本次发放提成合计')}：<b className="num">{usd2(totals.payout)}</b>
-          {totals.payoutGhs != null && (
+          {totals.bonus > 0 ? (
+            <>
+              {t('合计发放')}：<b className="num">{usd2(totals.payTotal)}</b>
+              <span style={{ margin: '0 6px' }}>（{t('提成')} {usd2(totals.payout)} + {t('额外奖励')} {usd2(totals.bonus)}）</span>
+            </>
+          ) : (
+            <>
+              {t('本次发放提成合计')}：<b className="num">{usd2(totals.payout)}</b>
+            </>
+          )}
+          {totals.payTotalGhs != null && (
             <>
               <span style={{ margin: '0 6px' }}>·</span>
-              <b className="num">{ghs2(totals.payoutGhs)}</b>
+              <b className="num">{ghs2(totals.payTotalGhs)}</b>
             </>
           )}
         </Typography.Paragraph>

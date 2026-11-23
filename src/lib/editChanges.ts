@@ -1,6 +1,6 @@
 // 审批通过以后改单据（42）：approval_logs 里 action = 'edit' 的那一行，changes = [{k: 哪一项, a: 改前, b: 改后}]，只记改了的。
 // 到账：账户（简称）、日期、金额、汇率、支票号、付款方、参考号、内部备注、凭证（个数）、拆分（整张：大架号或客户、性质、原币金额、备注）。
-// 提成单：表头各项、车辆（大架号、车型、单价、本车提成、备注）、付款（拆分编号、到账编号、大架号、日期、本单美元、备注）。
+// 提成单：表头各项（48 起含额外奖励、奖励说明）、车辆（大架号、车型、单价、本车提成、本车汇率、备注）、付款（拆分编号、到账编号、大架号、日期、本单美元、备注）。
 // 拆分、车辆、付款是整张清单：显示时比一比，只列去掉的和加上的。
 // 支票（43，cheque_logs.changes）：支票号、银行、名称、客户、车（大架号用「、」连）、业务员、用途、币种、金额、分期款/月、到期日期、
 // 合同序号、第几期、共几期、备注（remarks）、状态、计划存票日期、原因。
@@ -89,6 +89,10 @@ export function changeLabel(k: string, t: Tr): string {
       return t('转赛地汇率')
     case 'remarks':
       return t('备注')
+    case 'bonus_usd':
+      return t('额外奖励（USD）')
+    case 'bonus_note':
+      return t('奖励说明')
     // 支票（43）
     case 'drawer_bank':
       return t('支票银行')
@@ -149,6 +153,7 @@ export function changeValue(k: string, v: Json, t: Tr, cur?: string): string {
     case 'down_payment_usd':
     case 'per_term_usd':
     case 'commission_usd':
+    case 'bonus_usd':
       return '$ ' + money(v)
     case 'fx_rate':
     case 'payout_rate':
@@ -175,6 +180,7 @@ export function itemText(k: string, x: Json, t: Tr, cur?: string): string {
   } else if (k === 'vehicles') {
     parts.push(o.model ? `${str(o.vin)}（${str(o.model)}）` : str(o.vin))
     if (o.commission !== null && o.commission !== undefined) parts.push(t('本车提成 {amt}', { amt: '$ ' + money(o.commission) }))
+    if (o.rate !== null && o.rate !== undefined) parts.push(t('本车汇率 {rate}', { rate: String(o.rate) }))
   } else if (k === 'payments') {
     parts.push(o.receipt ? str(o.receipt) : t('期初'))
     parts.push(o.vin ? str(o.vin) : t('未锁定'))

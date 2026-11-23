@@ -696,6 +696,8 @@ export type Database = {
           ar_by: string | null
           ar_name: string | null
           attachments: string[]
+          bonus_note: string | null
+          bonus_usd: number
           charges_note: string | null
           commission_usd: number | null
           created_at: string
@@ -747,6 +749,8 @@ export type Database = {
           ar_by?: string | null
           ar_name?: string | null
           attachments?: string[]
+          bonus_note?: string | null
+          bonus_usd?: number
           charges_note?: string | null
           commission_usd?: number | null
           created_at?: string
@@ -798,6 +802,8 @@ export type Database = {
           ar_by?: string | null
           ar_name?: string | null
           attachments?: string[]
+          bonus_note?: string | null
+          bonus_usd?: number
           charges_note?: string | null
           commission_usd?: number | null
           created_at?: string
@@ -1702,6 +1708,8 @@ export type Database = {
           ar_by: string | null
           ar_name: string | null
           attachments: string[] | null
+          bonus_note: string | null
+          bonus_usd: number | null
           balance_usd: number | null
           charges_note: string | null
           commission_usd: number | null
@@ -1729,6 +1737,8 @@ export type Database = {
           paid_name: string | null
           paid_on: string | null
           paid_usd: number | null
+          pay_total_ghs: number | null
+          pay_total_usd: number | null
           payments: Json | null
           payout_ghs: number | null
           payout_rate: number | null

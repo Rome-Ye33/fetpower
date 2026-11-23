@@ -53,6 +53,8 @@ export type VoucherVehicle = {
   payment_method: string | null
   unit_price_usd: number
   commission_usd: number | null
+  /** 这台车自己的转赛地汇率（1 美元 = ? 赛地）；没填用整单的（47） */
+  payout_rate: number | null
   note: string | null
 }
 
@@ -91,8 +93,31 @@ export function parseVehicles(j: Json | null | undefined): VoucherVehicle[] {
     payment_method: str(x.payment_method),
     unit_price_usd: num(x.unit_price_usd),
     commission_usd: x.commission_usd === null || x.commission_usd === undefined || x.commission_usd === '' ? null : num(x.commission_usd),
+    payout_rate: x.payout_rate === null || x.payout_rate === undefined || x.payout_rate === '' ? null : num(x.payout_rate),
     note: str(x.note),
   }))
+}
+
+/**
+ * 每台车分开填了提成的单子，折合赛地按每台车自己的汇率算（没填的用整单的）：Σ 本车提成 × 汇率（还没乘发放比例）。
+ * 有一台既没自己的汇率、整单也没汇率就算不出（null）。一台都没填提成的单子返回 undefined（按整单汇率算）。
+ */
+export function perCarGhs(list: { commission_usd: number | null; payout_rate: number | null }[], headRate: number | null | undefined): number | null | undefined {
+  const filled = list.filter((x) => x.commission_usd != null)
+  if (!filled.length) return undefined
+  const head = num(headRate) > 0 ? num(headRate) : null
+  let sum = 0
+  for (const x of filled) {
+    const r = num(x.payout_rate) > 0 ? num(x.payout_rate) : head
+    if (r == null) return null
+    sum += num(x.commission_usd) * r
+  }
+  return sum
+}
+
+/** 每台车用的汇率都一样（都没填自己的，或填的都等于整单的）就是 false：打印和编辑页不用按车显示汇率 */
+export function hasOwnRates(list: { commission_usd: number | null; payout_rate: number | null }[], headRate: number | null | undefined): boolean {
+  return list.some((x) => x.commission_usd != null && x.payout_rate != null && x.payout_rate !== (num(headRate) > 0 ? num(headRate) : null))
 }
 
 /** 每台车分开填的提成之和（有车填了才算；都没填 = null，整单按手填的一个数） */
@@ -165,6 +190,12 @@ export type VoucherTotals = {
   payoutRate: number | null
   /** 本次发放提成折合赛地，没填汇率为 null */
   payoutGhs: number | null
+  /** 额外奖励（USD，48）：整单一个数，不挂车、不乘发放比例；没有就是 0 */
+  bonus: number
+  /** 本次发放合计 = 提成 × 比例 + 奖励；提成或比例没填为 null */
+  payTotal: number | null
+  /** 合计折合赛地：提成部分按 payoutGhs，奖励按整单汇率；有奖励但整单没汇率就算不出（null） */
+  payTotalGhs: number | null
 }
 
 type TotalsInput = {
@@ -181,6 +212,10 @@ type TotalsInput = {
   payoutRatio: number | null | undefined
   /** 美元转赛地汇率（1 美元 = ? 赛地），不填就不换算 */
   payoutRate?: number | null
+  /** 每台车分开填了提成和汇率的（47）：Σ 本车提成 × 本车汇率（没乘比例）；null = 有车算不出；undefined = 没分开填 */
+  perCarGhs?: number | null
+  /** 额外奖励（USD，48）：全额发、不乘比例、不挂车 */
+  bonus?: number | null
 }
 
 /** 余额差 1 美元以内算付清（系统里美元保留两位小数，模板是四舍五入到整数） */
@@ -216,6 +251,17 @@ export function voucherTotals(i: TotalsInput): VoucherTotals {
   const ratio = i.payoutRatio
   const payout = i.commission != null && ratio != null ? round2(num(i.commission) * num(ratio)) : null
   const rate = num(i.payoutRate) > 0 ? num(i.payoutRate) : null
+  // 折合赛地：每台车分开填了提成的按每台车的汇率（47），不然按整单的
+  let payoutGhs: number | null = null
+  if (payout != null) {
+    if (i.perCarGhs === undefined) payoutGhs = rate != null ? round2(payout * rate) : null
+    else if (i.perCarGhs != null && ratio != null) payoutGhs = round2(num(ratio) * i.perCarGhs)
+  }
+  // 额外奖励（48）：加在提成之后，不乘比例；折合赛地只能按整单汇率（奖励不挂车）
+  const bonus = num(i.bonus) > 0 ? round2(num(i.bonus)) : 0
+  const payTotal = payout == null ? null : round2(payout + bonus)
+  let payTotalGhs: number | null = null
+  if (payoutGhs != null) payTotalGhs = bonus > 0 ? (rate != null ? round2(payoutGhs + bonus * rate) : null) : payoutGhs
   return {
     units: i.vehiclePrices.length,
     vehiclesUsd,
@@ -228,14 +274,18 @@ export function voucherTotals(i: TotalsInput): VoucherTotals {
     state,
     payout,
     payoutRate: rate,
-    payoutGhs: payout != null && rate != null ? round2(payout * rate) : null,
+    payoutGhs,
+    bonus,
+    payTotal,
+    payTotalGhs,
   }
 }
 
 /** 存好的提成单的合计 */
 export function savedTotals(v: CommissionVoucher): VoucherTotals {
+  const vehicles = parseVehicles(v.vehicles)
   return voucherTotals({
-    vehiclePrices: parseVehicles(v.vehicles).map((x) => x.unit_price_usd),
+    vehiclePrices: vehicles.map((x) => x.unit_price_usd),
     otherCharges: v.other_charges_usd,
     discount: v.discount_usd,
     fullPayment: v.full_payment ?? true,
@@ -246,6 +296,8 @@ export function savedTotals(v: CommissionVoucher): VoucherTotals {
     commission: v.commission_usd,
     payoutRatio: v.payout_ratio,
     payoutRate: v.payout_rate,
+    perCarGhs: perCarGhs(vehicles, v.payout_rate),
+    bonus: v.bonus_usd,
   })
 }
 

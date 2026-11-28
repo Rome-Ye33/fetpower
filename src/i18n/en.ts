@@ -1068,6 +1068,7 @@ const UI: Record<string, string> = {
   // 选客户、选车
   "+ 新建客户“{name}”": "+ New customer “{name}”",
   "已新建客户": "Customer created",
+  "客户“{name}”已经有了，直接选上了": "Customer “{name}” already exists, so it has been selected",
   "选择客户": "Select a customer",
   "输入大架号或客户名搜索": "Search by VIN or customer",
   "搜索中…": "Searching…",

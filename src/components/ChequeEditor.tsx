@@ -7,9 +7,9 @@ import type { Cheque } from '../lib/cheques'
 import { errorText } from '../lib/errors'
 import { money } from '../lib/format'
 import { useT } from '../lib/i18n'
-import { useRefData } from '../lib/refdata'
+import { useEnsureKnown, useRefData } from '../lib/refdata'
 import { supabase } from '../lib/supabase'
-import type { Vehicle } from '../lib/supabase'
+import type { Customer, Vehicle } from '../lib/supabase'
 import CustomerSelect from './CustomerSelect'
 import { VehicleMultiSelect } from './VehicleSelect'
 
@@ -59,7 +59,7 @@ type Line = { key: number; cheque_no: string; due_date: dayjs.Dayjs | null; amou
 export default function ChequeEditor({ open, cheque, onClose }: Props) {
   const t = useT()
   const { message, modal } = App.useApp()
-  const { salespersons, customers, chequeBanks } = useRefData()
+  const { salespersons, chequeBanks } = useRefData()
   const [form] = Form.useForm<FormValues>()
   const [saving, setSaving] = useState(false)
   const [known, setKnown] = useState<Vehicle[]>([])
@@ -69,7 +69,10 @@ export default function ChequeEditor({ open, cheque, onClose }: Props) {
   const dueDate = Form.useWatch('due_date', form)
   const amount = Form.useWatch('amount', form)
   const customerId = Form.useWatch('customer_id', form)
+  const salespersonId = Form.useWatch('salesperson_id', form)
   const vehicleIds = Form.useWatch('vehicle_ids', form)
+  // 选的车是刚导进来的：它的业务员这个页面的名单里可能还没有，重新读一次好显示名字（客户框自己会读）
+  useEnsureKnown([], [salespersonId])
   const editing = !!cheque
   const locked = cheque?.status === 'cleared'
 
@@ -149,9 +152,8 @@ export default function ChequeEditor({ open, cheque, onClose }: Props) {
       if (!form.getFieldValue('drawer_name')) form.setFieldValue('drawer_name', first.customer_name ?? '')
     }
   }
-  const onCustomer = (id: number | null) => {
+  const onCustomer = (id: number | null, c: Customer | null) => {
     form.setFieldValue('customer_id', id)
-    const c = customers.find((x) => x.id === id)
     if (c) {
       if (!form.getFieldValue('salesperson_id') && c.salesperson_id) form.setFieldValue('salesperson_id', c.salesperson_id)
       if (!form.getFieldValue('drawer_name')) form.setFieldValue('drawer_name', c.name)
@@ -256,7 +258,7 @@ export default function ChequeEditor({ open, cheque, onClose }: Props) {
     })
   }
 
-  const spOptions = salespersons.filter((s) => s.active || s.id === form.getFieldValue('salesperson_id')).map((s) => ({ value: s.id, label: s.name }))
+  const spOptions = salespersons.filter((s) => s.active || s.id === salespersonId).map((s) => ({ value: s.id, label: s.name }))
 
   return (
     <Modal
@@ -280,7 +282,7 @@ export default function ChequeEditor({ open, cheque, onClose }: Props) {
           </Col>
           <Col xs={24} md={12}>
             <Form.Item name="customer_id" label={t('客户')} rules={[{ required: true, message: t('请选客户') }]}>
-              <CustomerSelect value={customerId ?? null} onChange={onCustomer} allowCreate salespersonId={form.getFieldValue('salesperson_id')} style={{ width: '100%' }} />
+              <CustomerSelect value={customerId ?? null} onChange={onCustomer} allowCreate salespersonId={salespersonId} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>

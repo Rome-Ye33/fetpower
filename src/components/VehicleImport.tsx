@@ -8,7 +8,7 @@ import type { Json } from '../lib/database.types'
 import { errorText } from '../lib/errors'
 import { money, todayAccra } from '../lib/format'
 import { useT } from '../lib/i18n'
-import { useRefData } from '../lib/refdata'
+import { useFreshPeople, useRefData } from '../lib/refdata'
 import { supabase } from '../lib/supabase'
 import { findVehicleHeaderRow, guessVehicleMapping, normName, parseVehicleRows, TEMPLATE_FIELDS, V_FIELDS } from '../lib/vehicleImport'
 import type { Issue, VField, VMapping, VRow } from '../lib/vehicleImport'
@@ -32,6 +32,8 @@ export default function VehicleImport({ open, onClose }: { open: boolean; onClos
   const t = useT()
   const { message } = App.useApp()
   const { salespersons, customers, reload } = useRefData()
+  // 预览里「新客户、新业务员几个」按名单比：打开时把名单读成最新的
+  useFreshPeople(open)
   const [fileName, setFileName] = useState('')
   const [book, setBook] = useState<XLSX.WorkBook | null>(null)
   const [sheet, setSheet] = useState('')

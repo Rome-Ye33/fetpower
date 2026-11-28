@@ -96,7 +96,8 @@ export default function VehicleSelect({ value, onChange, known = [], placeholder
     <Select
       showSearch={{ filterOption: false, onSearch: search }}
       allowClear
-      value={value ?? undefined}
+      // 一直受控，没选就是 null：给 undefined 的话 antd 自己记住点过的车，上层没收下（比如被拦住）框里也照样显示那台车
+      value={value ?? null}
       placeholder={placeholder ?? t('输入大架号或客户名搜索')}
       style={style}
       disabled={disabled}

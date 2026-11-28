@@ -57,7 +57,7 @@ import CustomerSelect from './CustomerSelect'
 import Vouchers from './Vouchers'
 
 // 提成申请单：按客户开，车从这个客户、这个业务员名下的车里选（大架号必填），
-// 付款从这个客户的到账里勾（这几台车的，或者大架号还没锁定的）。提成金额手填。
+// 付款明细照到账自动带出（这几台车名下所有已生效的到账，按到账金额算，不能勾、不能改；Rome 2026-11-22）。提成金额手填。
 // 流程都在线上：草稿 → 提交 → 审批流里的各级（管理员在用户与权限里定，提交时记下当时的流程）→ 财务标记已发放。
 // 每一级由谁审看审批岗位（用户与权限里指定）；岗位上没人时管理员代办。可以带附件。
 
@@ -160,6 +160,18 @@ function eligible(c: Claim, vids: Set<number>, spId: number | null, staff: boole
   if (c.vehicle_id != null) return vids.has(c.vehicle_id)
   return c.salesperson_id === spId || (staff && c.salesperson_id == null)
 }
+
+/**
+ * 本单的付款明细（Rome 2026-11-22「提成单的这个界面不允许修改」）：照到账录入自动带出，不由开单的人勾选、改数。
+ * = 这几台车名下所有已生效的付款（期初、全款、首付、分期款……），本单金额就是到账的美元数。
+ * 没定大架号的到账不算（财务在到账里定了大架号才进来）；到账改了，下次打开 / 保存时跟着变。
+ */
+function autoPay(vids: Set<number>, list: Claim[]): PayRow[] {
+  return list
+    .filter((c) => isPayKind(c) && c.id != null && c.vehicle_id != null && vids.has(c.vehicle_id) && num(c.amount_usd) > 0)
+    .map((c) => ({ claim_id: c.id as number, share_usd: num(c.amount_usd), note: '' }))
+}
+const samePay = (a: PayRow[], b: PayRow[]) => a.length === b.length && a.every((p, i) => p.claim_id === b[i].claim_id && num(p.share_usd) === num(b[i].share_usd))
 
 export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   const t = useT()
@@ -370,25 +382,16 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
       setLedger(vehicles)
       setClaims(list)
       setCandLoading(false)
-      // 系统数据变了（车换了客户/业务员、到账改了）：去掉已经不能放进本单的
+      // 系统数据变了（车换了客户/业务员）：去掉已经不能放进本单的车；付款明细照现在的到账重新带出（不能手改，见 autoPay）
       const cur = selRef.current
       const ids = new Set(vehicles.map((v) => v.id))
       const veh = cur.veh.filter((r) => ids.has(r.vehicle_id))
       const vids = new Set(veh.map((r) => r.vehicle_id))
-      const byId = new Map(list.map((c) => [c.id, c]))
-      const pay = cur.pay.filter((p) => {
-        const c = byId.get(p.claim_id)
-        return !!c && eligible(c, vids, spId, cvEdit)
-      })
-      if (veh.length !== cur.veh.length || pay.length !== cur.pay.length) {
+      const pay = autoPay(vids, list)
+      if (veh.length !== cur.veh.length || !samePay(pay, cur.pay)) {
         setSel({ veh, pay })
-        if (noticePrune.current) {
-          setDropped(
-            t('有 {v} 台车、{p} 笔付款已经不符合条件（车或到账改过），已从本单去掉，请核对后保存。', {
-              v: cur.veh.length - veh.length,
-              p: cur.pay.length - pay.length,
-            }),
-          )
+        if (noticePrune.current && veh.length !== cur.veh.length) {
+          setDropped(t('有 {v} 台车已经不符合条件（车换了客户或业务员），已从本单去掉，请核对后保存。', { v: cur.veh.length - veh.length }))
           setDirty(true)
         }
       }
@@ -431,7 +434,13 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   const vehOthers = (vid: number) => others.filter((o) => o.vehicleIds.has(vid))
 
   const vehIds = useMemo(() => new Set(sel.veh.map((r) => r.vehicle_id)), [sel.veh])
-  const payCandidates = useMemo(() => claims.filter((c) => eligible(c, vehIds, spId, cvEdit)), [claims, vehIds, spId, cvEdit])
+  /** 表里列的就是算进本单的：这几台车名下的到账（autoPay 的那些） */
+  const payCandidates = useMemo(() => {
+    const ids = new Set(sel.pay.map((p) => p.claim_id))
+    return claims.filter((c) => ids.has(c.id as number))
+  }, [claims, sel.pay])
+  /** 这个客户名下还没定大架号的到账（本单不算，提示一下） */
+  const unlockedCount = useMemo(() => claims.filter((c) => c.vehicle_id == null && eligible(c, vehIds, spId, cvEdit)).length, [claims, vehIds, spId, cvEdit])
   const savedVehicles = useMemo(() => (voucher ? parseVehicles(voucher.vehicles) : []), [voucher])
   const savedPayments = useMemo(() => (voucher ? parsePayments(voucher.payments) : []), [voucher])
 
@@ -517,24 +526,15 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   }
 
   /**
-   * 改了车：去掉不在本单的车的付款；新加的车自动勾上它的全部付款。
+   * 改了车：付款明细照现在选的车重新带出（这几台车名下的到账全部算进来）。
    * 车上的到账整笔都是这台车的，分期提成分几次发时，后面的单子也照样列全部付款（显示付款进度），所以不扣别的单子。
    */
   const setVehicles = (ids: number[]) => {
     setDirty(true)
     const keep = new Map(sel.veh.map((r) => [r.vehicle_id, r]))
     const veh = ids.map((vid) => keep.get(vid) ?? { vehicle_id: vid, note: '', commission: null, rate: null })
-    const vids = new Set(ids)
-    const added = new Set(ids.filter((vid) => !keep.has(vid)))
-    const pay = sel.pay.filter((p) => {
-      const c = claimById.get(p.claim_id)
-      return !c || c.vehicle_id == null || vids.has(c.vehicle_id)
-    })
-    for (const c of claims) {
-      if (!isPayKind(c) || c.id == null || c.vehicle_id == null || !added.has(c.vehicle_id)) continue
-      if (pay.some((p) => p.claim_id === c.id)) continue
-      pay.push({ claim_id: c.id, share_usd: num(c.amount_usd), note: '' })
-    }
+    // 付款明细跟着车走：这几台车名下的到账全部带出（不能勾、不能改）
+    const pay = autoPay(new Set(ids), claims)
     setSel({ veh, pay })
     setHead(withAuto(head, veh.map((r) => ledgerById.get(r.vehicle_id)).filter((v): v is Vehicle => !!v)))
   }
@@ -553,27 +553,6 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   const setVehRate = (vid: number, rate: number | null) => {
     setDirty(true)
     setSel((s) => ({ ...s, veh: s.veh.map((r) => (r.vehicle_id === vid ? { ...r, rate } : r)) }))
-  }
-
-  /** 勾选付款：车上的默认整笔；大架号未锁定的（可能分给几张单）默认扣掉别的单子已经算的 */
-  const setTicked = (keys: React.Key[]) => {
-    setDirty(true)
-    const keep = new Map(sel.pay.map((p) => [p.claim_id, p]))
-    const pay = keys.map((k) => {
-      const cid = Number(k)
-      const old = keep.get(cid)
-      if (old) return old
-      const c = claimById.get(cid)
-      const whole = c ? num(c.amount_usd) : null
-      const left = c && c.vehicle_id == null ? round2(num(c.amount_usd) - (used.get(cid)?.usd ?? 0)) : 0
-      return { claim_id: cid, share_usd: left > 0.005 ? left : whole, note: '' }
-    })
-    setSel((s) => ({ ...s, pay }))
-  }
-
-  const setPay = (cid: number, patch: Partial<PayRow>) => {
-    setDirty(true)
-    setSel((s) => ({ ...s, pay: s.pay.map((p) => (p.claim_id === cid ? { ...p, ...patch } : p)) }))
   }
 
   const payload = (): Json => ({
@@ -607,7 +586,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
       : !sel.veh.length
         ? t('请至少选一台车（大架号必填）')
         : !sel.pay.length
-          ? t('请勾选客户的付款')
+          ? t('这几台车还没有到账，先在到账录入里记到账')
           : !(num(perCar ?? head.commission_usd) > 0)
             ? t('请填提成金额')
             : head.payout_pct == null
@@ -630,13 +609,6 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
     if (!head.salesperson_id) {
       message.error(t('请选业务员'))
       return null
-    }
-    for (const [i, p] of sel.pay.entries()) {
-      const c = claimById.get(p.claim_id)
-      if (!(num(p.share_usd) > 0) || (c && num(p.share_usd) > num(c.amount_usd) + 0.005)) {
-        message.error(t('第 {n} 笔付款：本单金额要大于 0，且不超过这笔付款的金额', { n: i + 1 }))
-        return null
-      }
     }
     setBusy('save')
     const { data, error } = await supabase.rpc('save_commission_voucher', { p: payload() })
@@ -922,7 +894,6 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
     { title: t('备注'), dataIndex: 'note', ellipsis: true },
   ]
 
-  const ticked = new Map(sel.pay.map((p) => [p.claim_id, p]))
   const payColumns: ColumnsType<Claim> = [
     { title: t('款项性质'), dataIndex: 'nature', width: 100, render: (x: string) => t(x) },
     { title: t('日期'), dataIndex: 'claim_date', width: 100 },
@@ -958,25 +929,6 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
         ),
     },
     {
-      title: t('本单金额（USD）'),
-      width: 140,
-      render: (_, c) => {
-        const p = ticked.get(c.id as number)
-        return (
-          <InputNumber
-            size="small"
-            min={0}
-            precision={2}
-            prefix="$"
-            style={{ width: '100%' }}
-            disabled={!p}
-            value={p ? (p.share_usd ?? undefined) : undefined}
-            onChange={(x) => setPay(c.id as number, { share_usd: x == null ? null : Number(x) })}
-          />
-        )
-      },
-    },
-    {
       title: t('其他提成单'),
       width: 150,
       render: (_, c) => {
@@ -986,14 +938,6 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
             <span>{othersTags(u.nos.map((no) => ({ no })))}</span>
           </Tooltip>
         ) : null
-      },
-    },
-    {
-      title: t('备注'),
-      width: 160,
-      render: (_, c) => {
-        const p = ticked.get(c.id as number)
-        return <Input size="small" disabled={!p} value={p?.note ?? ''} onChange={(e) => setPay(c.id as number, { note: e.target.value })} />
       },
     },
   ]
@@ -1412,8 +1356,8 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
               loading={candLoading}
               dataSource={payCandidates}
               columns={payColumns}
-              scroll={{ x: 1400 }}
-              rowSelection={{ selectedRowKeys: sel.pay.map((p) => p.claim_id), onChange: (keys) => setTicked(keys) }}
+              scroll={{ x: 1100 }}
+              className="cv-pay-auto"
               locale={{
                 emptyText: sel.veh.length
                   ? t('这几台车还没有到账。大架号还没锁定的钱，要先在到账录入里记到这个客户名下。')
@@ -1439,7 +1383,8 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
           </Space>
           {editable && (
             <div className="hint" style={{ marginTop: 6 }}>
-              {t('一笔钱付了几张单时，“本单金额”只填算进这张单的美元。')}
+              {t('付款明细照到账录入自动带出、按到账金额算，这里不能改；要补到账或定大架号，请在到账录入里改。')}
+              {unlockedCount > 0 && <div className="cv-pay-unlocked">{t('另有 {n} 笔没定大架号的到账没算进来，财务定了大架号就会出现在这里。', { n: unlockedCount })}</div>}
             </div>
           )}
         </Card>

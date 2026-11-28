@@ -1321,8 +1321,7 @@ const UI: Record<string, string> = {
   "新建提成单": "New voucher",
   "提成单 {no}": "Commission voucher {no}",
   "提成单草稿 #{id}": "Draft voucher #{id}",
-  "业务员按客户开单（选车、勾客户的付款、填提成金额，可以加附件），提交后在线上逐级审批：{flow}，批准后财务发放。":
-    "Salespeople open one voucher per customer (choose the vehicles, tick the customer's payments, enter the commission, add attachments if needed). After it is submitted it is approved online, step by step: {flow}. Finance then pays out.",
+  "业务员按客户开单（选车，客户的付款自动带出，填提成金额，可以加附件），提交后在线上逐级审批：{flow}，批准后财务发放。": "Salespeople open one voucher per customer (choose the vehicles; the customer's payments are filled in automatically; enter the commission, add attachments if needed). After it is submitted it is approved online, step by step: {flow}. Finance then pays out.",
   "草稿 #{id}": "Draft #{id}",
   "按客户开单：选好客户和业务员，再选这单的车（大架号必填）。系统会带出这几台车的到账；大架号还没锁定的到账也可以勾上。提成金额手填。":
     "One voucher per customer: choose the customer and salesperson, then the vehicles on this voucher (VIN required). The receipts of these vehicles come in automatically, and you can also tick receipts whose VIN is not set yet. Enter the commission by hand.",
@@ -1361,8 +1360,6 @@ const UI: Record<string, string> = {
   "删不了：只有草稿和被退回的提成单可以删": "Can't delete: only drafts and returned vouchers can be deleted",
   "被退回：{reason}": "Returned: {reason}",
   "{name} 于 {when} 退回。改好后重新提交。": "Returned by {name} on {when}. Fix it and submit again.",
-  "有 {v} 台车、{p} 笔付款已经不符合条件（车或到账改过），已从本单去掉，请核对后保存。":
-    "{v} vehicle(s) and {p} payment(s) no longer qualify (the vehicle or receipt was changed) and were removed from this voucher. Please check and save.",
   "制单": "Prepared",
   "发放": "Payout",
   "一、客户及车辆": "1. Customer & vehicles",
@@ -1399,6 +1396,10 @@ const UI: Record<string, string> = {
   "合计发放": "Total to pay",
   "整单一个数，不挂在任何一台车上，也不乘发放比例，全额发；没有就空着": "One amount for the whole voucher, not tied to any unit and not multiplied by the payout ratio: it is paid in full. Leave blank if none.",
   "如：季度销售冠军奖": "e.g. quarterly top-seller award",
+  // 2026-11-22 付款明细照到账自动带出、不能改
+  "有 {v} 台车已经不符合条件（车换了客户或业务员），已从本单去掉，请核对后保存。": "{v} vehicle(s) no longer qualify (customer or salesperson changed) and were removed from this voucher. Please check and save.",
+  "付款明细照到账录入自动带出、按到账金额算，这里不能改；要补到账或定大架号，请在到账录入里改。": "Payments are taken from Receipts automatically at their received amounts and can't be edited here. To add a receipt or set a chassis number, do it in Receipts.",
+  "另有 {n} 笔没定大架号的到账没算进来，财务定了大架号就会出现在这里。": "{n} more receipt(s) without a chassis number are not counted; they will appear here once Finance sets the chassis number.",
   "填了额外奖励但整单没填汇率：奖励折不了赛地，所以合计折合赛地空着；填上整单汇率就有了": "A bonus is entered but the voucher has no rate, so the bonus can't be converted to cedis and the total in cedis is blank. Enter the voucher rate to show it.",
   "每台车都填了提成，这里就是它们相加": "Every vehicle has its own commission, so this is their sum",
   "提成金额是上面每台车填的提成相加，要改在车辆那一栏改；都清空就回到整单填一个数": "The commission is the sum of the per-vehicle amounts above; edit them in the vehicle table. Clear them all to go back to one amount for the whole voucher",
@@ -1421,7 +1422,6 @@ const UI: Record<string, string> = {
   "期初": "Opening",
   "折合美元": "USD",
   "未锁定": "VIN not set",
-  "本单金额（USD）": "This voucher (USD)",
   "其他提成单已算 {amt}": "{amt} already on other vouchers",
   "本单收款金额": "Amount",
   "合付 {whole}": "Shared payment: {whole}",
@@ -1432,7 +1432,6 @@ const UI: Record<string, string> = {
   "未付余额": "Balance",
   "付款进度": "Payment progress",
   "分期情况": "Installment status",
-  "一笔钱付了几张单时，“本单金额”只填算进这张单的美元。": "When one payment covers several vouchers, enter only this voucher's share in USD.",
   "四、提成": "4. Commission",
   "提成金额（USD）": "Commission (USD)",
   "本次发放比例": "Payout ratio",
@@ -1445,9 +1444,8 @@ const UI: Record<string, string> = {
   "折合赛地": "In cedis",
   "有人要美元、有人要赛地，打印的单子上两个金额都印，汇率按 1 美元 = {rate} 赛地":
     "Some want US dollars and some want cedis, so the printed voucher shows both, at 1 USD = {rate} GHS.",
-  "第 {n} 笔付款：本单金额要大于 0，且不超过这笔付款的金额": "Payment {n}: the amount for this voucher must be above 0 and not more than the payment",
   "请至少选一台车（大架号必填）": "Choose at least one vehicle (VIN required)",
-  "请勾选客户的付款": "Tick the customer's payments",
+  "这几台车还没有到账，先在到账录入里记到账": "These vehicles have no receipts yet. Enter the receipt in Receipts first.",
   "请填提成金额": "Enter the commission amount",
   "请填本次发放比例": "Enter the payout ratio",
   "请写退回原因": "Please give a reason for returning it",

@@ -140,7 +140,7 @@ export default function CommissionPage() {
         </Space>
       </div>
       <Typography.Paragraph type="secondary" style={{ marginTop: -4 }}>
-        {t('业务员按客户开单（选车、勾客户的付款、填提成金额，可以加附件），提交后在线上逐级审批：{flow}，批准后财务发放。', {
+        {t('业务员按客户开单（选车，客户的付款自动带出，填提成金额，可以加附件），提交后在线上逐级审批：{flow}，批准后财务发放。', {
           flow: flow.active.map((s) => flow.name(s.key)).join(' → '),
         })}
       </Typography.Paragraph>

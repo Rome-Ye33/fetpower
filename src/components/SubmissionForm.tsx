@@ -7,7 +7,7 @@ import { errorText } from '../lib/errors'
 import { dateTime, money, num, round2, todayAccra, usd } from '../lib/format'
 import { useT } from '../lib/i18n'
 import { defaultNature, receiptNatures } from '../lib/natures'
-import { accountOptions, lookupRate, useRefData } from '../lib/refdata'
+import { accountOptions, lookupRate, useFreshPeople, useRefData } from '../lib/refdata'
 import { isFillRequest, notifySubmissionsChanged, parseClaims, STATUS_COLOR, STATUS_LABEL } from '../lib/submissions'
 import type { Submission, SubmissionClaim, SubmissionStatus } from '../lib/submissions'
 import { supabase } from '../lib/supabase'
@@ -57,6 +57,8 @@ export default function SubmissionForm({ open, submission, onClose }: Props) {
   const t = useT()
   const { profile, session, isStaff } = useAuth()
   const { accounts, accountById, natures, customers, salespersons } = useRefData()
+  // 手填的客户按名字对上客户资料：打开时把名单读成最新的（别人刚建的客户也对得上）
+  useFreshPeople(open)
   const { message, modal } = App.useApp()
   const [form] = Form.useForm<FormValues>()
   const [lines, setLines] = useState<LineDraft[]>([])

@@ -9,7 +9,7 @@ import { parseFlow, useFlow } from '../lib/flow'
 import { money, num, usd } from '../lib/format'
 import { useAuth } from '../lib/auth'
 import { useT } from '../lib/i18n'
-import { accountOptions, useRefData } from '../lib/refdata'
+import { accountOptions, useFreshPeople, useRefData } from '../lib/refdata'
 import { findReceiptHeaderRow, groupReceipts, guessReceiptMapping, R_FIELDS, R_TEMPLATE, receiptPayload, resolveReceipts, rowRange } from '../lib/receiptImport'
 import type { ExistingReceipt, Issue, PReceipt, Rate, RField, RMapping, Status, VehicleLite } from '../lib/receiptImport'
 import { matchAccount } from '../lib/statement'
@@ -48,6 +48,8 @@ export default function ReceiptImport({ open, onClose }: { open: boolean; onClos
   const { message } = App.useApp()
   const { isAdmin } = useAuth()
   const { accounts, accountById, customers, salespersons, natures } = useRefData()
+  // 按名字找客户、业务员：别的标签页、别人刚建的也要找得到，打开时把名单读成最新的
+  useFreshPeople(open)
   const rflow = useFlow('receipt')
   const [fileName, setFileName] = useState('')
   const [book, setBook] = useState<XLSX.WorkBook | null>(null)

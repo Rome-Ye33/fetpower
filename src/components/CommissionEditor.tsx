@@ -49,9 +49,9 @@ import type { Json } from '../lib/database.types'
 import { errorText } from '../lib/errors'
 import { dateTime, money, num, round2, todayAccra } from '../lib/format'
 import { useT } from '../lib/i18n'
-import { lookupRate, useRefData } from '../lib/refdata'
+import { lookupRate, useEnsureKnown, useRefData } from '../lib/refdata'
 import { supabase } from '../lib/supabase'
-import type { Claim, Vehicle } from '../lib/supabase'
+import type { Claim, Customer, Vehicle } from '../lib/supabase'
 import ApprovalTrail from './ApprovalTrail'
 import CustomerSelect from './CustomerSelect'
 import Vouchers from './Vouchers'
@@ -230,6 +230,8 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
   const id = voucher?.id ?? null
   const custId = head.customer_id
   const spId = head.salesperson_id
+  // 业务员（单上的、这个客户的车所在的）这个页面的名单里还没有（别的标签页、别人刚建的）：重新读一次好显示、好选
+  useEnsureKnown([], [spId, ...spCounts.keys()])
   useEffect(() => {
     let on = true
     void customersOf(spId).then((ids) => {
@@ -491,7 +493,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
     setHead((h) => ({ ...h, ...patch }))
   }
 
-  const pickCustomer = async (cid: number | null) => {
+  const pickCustomer = async (cid: number | null, cu: Customer | null) => {
     setDirty(true)
     setSel(EMPTY_SEL)
     let sp = head.salesperson_id
@@ -499,7 +501,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
       // 默认业务员：客户资料上的；他名下没有这个客户的车时，用这个客户的车最多的那个业务员
       const counts = await vehicleCountsBySp(cid)
       if (!sp || !counts.has(sp)) {
-        const own = customers.find((c) => c.id === cid)?.salesperson_id ?? null
+        const own = cu?.salesperson_id ?? null
         const most = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
         sp = own && counts.has(own) ? own : (most ?? own ?? sp)
       }
@@ -1234,7 +1236,7 @@ export default function CommissionEditor({ open, voucherId, onClose }: Props) {
               </Col>
               <Col xs={24} md={8}>
                 <Form.Item label={t('客户')} required>
-                  <CustomerSelect value={custId} only={spCustomers} onChange={(c) => void pickCustomer(c)} />
+                  <CustomerSelect value={custId} only={spCustomers} onChange={(c, cu) => void pickCustomer(c, cu)} />
                 </Form.Item>
               </Col>
               <Col xs={24}>

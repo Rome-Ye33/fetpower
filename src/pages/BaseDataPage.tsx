@@ -12,7 +12,7 @@ import { deleteByIds, findInUse, setActive } from '../lib/masterDelete'
 import type { MasterKind } from '../lib/masterDelete'
 import { normKey, parseBool } from '../lib/masterImport'
 import type { MField, MRow } from '../lib/masterImport'
-import { useRefData } from '../lib/refdata'
+import { useFreshPeople, useRefData } from '../lib/refdata'
 import { parseAmount, parseDate } from '../lib/statement'
 import { supabase } from '../lib/supabase'
 import type { Account, ChequeBank, Customer, FxRate, Salesperson } from '../lib/supabase'
@@ -333,8 +333,10 @@ function Customers() {
   const { isAdmin, canEdit } = useAuth()
   /** 新增、修改、导入客户：“基础资料”可编辑（删除照旧只有管理员） */
   const bxEdit = canEdit('base')
-  const { customers, salespersons, reload } = useRefData()
+  const { customers, salespersons, reload, refreshPeople } = useRefData()
   const { message } = App.useApp()
+  // 别的标签页、别人（导车辆时）刚建的客户也列出来；批量导入按这个名单判断「已有」
+  useFreshPeople(true)
   const [q, setQ] = useState('')
   const [edit, setEdit] = useState<Customer | null | 'new'>(null)
   const [imp, setImp] = useState(false)
@@ -360,7 +362,11 @@ function Customers() {
       note: v.note?.trim() || null,
     }
     const res = edit === 'new' ? await supabase.from('customers').insert(row) : await supabase.from('customers').update(row).eq('id', (edit as Customer).id)
-    if (res.error) return message.error(errorText(res.error))
+    if (res.error) {
+      // 重名：多半是别人刚建的，读一下名单让它出现在列表里
+      if (res.error.code === '23505') void refreshPeople()
+      return message.error(errorText(res.error))
+    }
     message.success(t('已保存'))
     setEdit(null)
     void reload()
@@ -481,8 +487,10 @@ const SP_FIELDS: MField[] = [
 function Salespersons() {
   const t = useT()
   const { isAdmin } = useAuth()
-  const { salespersons, reload } = useRefData()
+  const { salespersons, reload, refreshPeople } = useRefData()
   const { message } = App.useApp()
+  // 别的标签页、别人（导车辆时）刚建的业务员也列出来；批量导入按这个名单判断「已有」
+  useFreshPeople(true)
   const [edit, setEdit] = useState<Salesperson | null | 'new'>(null)
   const [imp, setImp] = useState(false)
   const [form] = Form.useForm<{ name: string; active: boolean }>()
@@ -492,7 +500,10 @@ function Salespersons() {
     const v = await form.validateFields()
     const row = { name: v.name.trim(), active: v.active }
     const res = edit === 'new' ? await supabase.from('salespersons').insert(row) : await supabase.from('salespersons').update(row).eq('id', (edit as Salesperson).id)
-    if (res.error) return message.error(errorText(res.error))
+    if (res.error) {
+      if (res.error.code === '23505') void refreshPeople()
+      return message.error(errorText(res.error))
+    }
     message.success(t('已保存'))
     setEdit(null)
     void reload()

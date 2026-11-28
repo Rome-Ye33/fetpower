@@ -35,11 +35,11 @@ import { moduleOptions, newPart, notifyJournalChanged, partsPayload, partsTotal 
 import { listSep } from '../lib/journalLog'
 import type { PartDraft } from '../lib/journal'
 import { defaultNature, receiptNatures } from '../lib/natures'
-import { accountOptions, lookupRate, useRefData } from '../lib/refdata'
+import { accountOptions, lookupRate, useEnsureKnown, useRefData } from '../lib/refdata'
 import { claimsSummary, notifySubmissionsChanged, parseClaims } from '../lib/submissions'
 import type { Submission, SubmissionClaim } from '../lib/submissions'
 import { supabase } from '../lib/supabase'
-import type { Receipt, Vehicle } from '../lib/supabase'
+import type { Customer, Receipt, Vehicle } from '../lib/supabase'
 import type { Json } from '../lib/database.types'
 import AiFill from './AiFill'
 import CustomerSelect from './CustomerSelect'
@@ -174,6 +174,8 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
   const [requesting, setRequesting] = useState(false)
   const [reqSp, setReqSp] = useState<number | undefined>()
   const [reqNote, setReqNote] = useState('')
+  // 拆分里、请填写里的业务员这个页面的名单里还没有（别的标签页、别人刚建的）：重新读一次好显示名字
+  useEnsureKnown([], [...claims.map((c) => c.salesperson_id), reqSp])
   /** 表里的内容是智能填表认出来的第几笔（保存后记成已录） */
   const [aiIndex, setAiIndex] = useState<number | null>(null)
   /** 配对上的银行流水（由流水生成的新到账按预填算）：账户、日期、金额和银行给的摘要、参考号、支票号按银行为准，锁住不能改 */
@@ -475,9 +477,9 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
     setClaims((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   }
 
-  /** 不选车时选客户：业务员默认用客户资料上的 */
-  const pickCustomer = (key: string, id: number | null) => {
-    const sp = id ? (customers.find((c) => c.id === id)?.salesperson_id ?? null) : null
+  /** 不选车时选客户：业务员默认用客户资料上的（客户从选择框带过来，刚读到的客户名单里也许还没有） */
+  const pickCustomer = (key: string, id: number | null, cu: Customer | null) => {
+    const sp = id ? (cu?.salesperson_id ?? null) : null
     setDirty(true)
     // 业务员提交的：业务员就是提交人；财务自己录的：跟着客户走
     setClaims((rows) =>
@@ -1070,7 +1072,7 @@ export default function ReceiptEditor({ open, receiptId, prefill, submission, on
                 <div className="hint">{t('还不知道是哪台车（大架号未锁定）：先记到客户名下，以后再选车')}</div>
                 <CustomerSelect
                   value={r.customer_id}
-                  onChange={(id) => pickCustomer(r.key, id)}
+                  onChange={(id, cu) => pickCustomer(r.key, id, cu)}
                   placeholder={t('选客户')}
                   style={{ width: '100%', marginTop: 4 }}
                   disabled={claimsReadOnly || rowFixed(r)}

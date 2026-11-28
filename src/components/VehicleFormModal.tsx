@@ -2,7 +2,7 @@ import { App, Col, DatePicker, Form, Input, InputNumber, Modal, Radio, Row, Sele
 import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
 import { errorText } from '../lib/errors'
-import { useRefData } from '../lib/refdata'
+import { useEnsureKnown, useRefData } from '../lib/refdata'
 import { supabase } from '../lib/supabase'
 import type { Vehicle } from '../lib/supabase'
 import CustomerSelect from './CustomerSelect'
@@ -40,6 +40,8 @@ export default function VehicleFormModal({ open, vehicle, initial, onClose }: Pr
   const method = Form.useWatch('payment_method', form)
   const ship = Form.useWatch('ship_status', form)
   const salespersonId = Form.useWatch('salesperson_id', form)
+  // 业务员是别的标签页、别人刚建的（比如刚导进来的车），这个页面的名单里还没有：重新读一次好显示名字
+  useEnsureKnown([], [salespersonId])
 
   useEffect(() => {
     if (!open) return

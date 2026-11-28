@@ -30,7 +30,7 @@ import {
 } from '../lib/journalImport'
 import type { ExistingEntry, JField, JItem, JMapping, JStatus, LineLite, LineState, SkipReason } from '../lib/journalImport'
 import type { ExistingReceipt, Issue, Rate, VehicleLite } from '../lib/receiptImport'
-import { useRefData } from '../lib/refdata'
+import { useFreshPeople, useRefData } from '../lib/refdata'
 import { notifySubmissionsChanged } from '../lib/submissions'
 import { fetchAll, supabase } from '../lib/supabase'
 import type { Account } from '../lib/supabase'
@@ -78,6 +78,8 @@ export default function JournalImport({ open, scope, onClose }: { open: boolean;
   const { message } = App.useApp()
   const { isAdmin, canEdit } = useAuth()
   const { accounts, accountById, customers, salespersons, natures } = useRefData()
+  // 按名字找客户、业务员：别的标签页、别人刚建的也要找得到，打开时把名单读成最新的
+  useFreshPeople(open)
   const rflow = useFlow('receipt')
   // 车款导成到账要「到账录入」能编辑；没有的跳过
   const carOk = canEdit('receipts')
